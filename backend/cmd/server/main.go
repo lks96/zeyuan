@@ -282,6 +282,8 @@ func (app appServer) routes() http.Handler {
 	mux.HandleFunc("GET /api/health", app.handleHealth)
 	mux.HandleFunc("POST /api/auth/login", app.handleLogin)
 
+	mux.HandleFunc("GET /api/tool-packages", app.requirePermission("tools:view", app.handleToolPackages))
+	mux.HandleFunc("GET /api/tool-packages/{id}/export", app.requirePermission("tools:manage", app.handleExportToolPackage))
 	mux.HandleFunc("GET /api/modules", app.requirePermission("tools:view", app.handleModules))
 	mux.HandleFunc("POST /api/modules", app.requirePermission("tools:manage", app.handleUpsertModule))
 	mux.HandleFunc("PUT /api/modules/{id}", app.requirePermission("tools:manage", app.handleUpdateModule))
@@ -392,6 +394,16 @@ func (app appServer) handleModules(w http.ResponseWriter, r *http.Request, _ mod
 	}
 
 	writeJSON(w, http.StatusOK, apiResponse{Data: modules})
+}
+
+func (app appServer) handleToolPackages(w http.ResponseWriter, r *http.Request, _ models.User) {
+	packages, err := app.store.ListToolPackages(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load tool packages")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, apiResponse{Data: packages})
 }
 
 func (app appServer) handleUpsertModule(w http.ResponseWriter, r *http.Request, _ models.User) {

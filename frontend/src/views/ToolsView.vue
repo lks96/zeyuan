@@ -16,10 +16,11 @@ import {
 import {
   batchUpdateProductCollectionMaintenance,
   exportLatestDeliveryExtractBatch,
+  exportToolPackageArchive,
   fetchLatestDeliveryExtractBatch,
-  fetchModules,
   fetchProductCollectionProducts,
   fetchShops,
+  fetchToolPackages,
   hasPermission,
   importDeliveryExtractJson,
   importProductCollectionJson,
@@ -28,7 +29,7 @@ import {
   type ProductCollectionList,
   type ProductCollectionProduct,
   type Shop,
-  type ToolModule,
+  type ToolPackage,
 } from '@/services/api'
 
 const defaultPageSize = 10
@@ -37,7 +38,7 @@ const recentToolsStorageKey = 'temu-tools-recent-tools'
 
 const canManageTools = computed(() => hasPermission('tools:manage'))
 
-const modules = ref<ToolModule[]>([])
+const toolPackages = ref<ToolPackage[]>([])
 const shops = ref<Shop[]>([])
 const latestBatch = ref<DeliveryExtractBatch | null>(null)
 const productCollection = ref<ProductCollectionList | null>(null)
@@ -47,6 +48,7 @@ const isProductImporting = ref(false)
 const isProductSearching = ref(false)
 const isProductSaving = ref(false)
 const isExporting = ref(false)
+const exportingToolId = ref('')
 const isSearching = ref(false)
 const apiError = ref('')
 const successMessage = ref('')
@@ -90,17 +92,15 @@ const productTotalPages = computed(() => Math.max(1, Math.ceil(productRowsTotal.
 const productRangeStart = computed(() => (productRowsTotal.value === 0 ? 0 : (productCurrentPage.value - 1) * defaultPageSize + 1))
 const productRangeEnd = computed(() => Math.min(productCurrentPage.value * defaultPageSize, productRowsTotal.value))
 const toolCards = computed(() => {
-  return modules.value.map((module, index) => {
-    const meta = toolDisplayMeta(module)
+  return toolPackages.value.map((toolPackage, index) => {
     return {
-      ...module,
-      ...meta,
-      icon: toolIcon(module.id),
+      ...toolPackage,
+      iconComponent: toolIcon(toolPackage.icon),
       heightClass: index % 3 === 1 ? 'tool-card-tall' : index % 3 === 2 ? 'tool-card-compact' : '',
-      isCurrent: module.id === activeToolId.value,
-      isRecent: recentToolIds.value.includes(module.id),
-      isRecommended: module.id === 'product-research',
-      isAvailable: module.status === 'active' && hasToolPanel(module.id),
+      isCurrent: toolPackage.id === activeToolId.value,
+      isRecent: recentToolIds.value.includes(toolPackage.id),
+      isRecommended: toolPackage.recommended,
+      isAvailable: toolPackage.status === 'active' && canRenderToolPackage(toolPackage),
     }
   })
 })
@@ -134,17 +134,17 @@ async function loadToolCenter() {
   apiError.value = ''
 
   try {
-    const [modulePayload, latestPayload, productPayload, shopPayload] = await Promise.all([
-      fetchModules(),
+    const [packagePayload, latestPayload, productPayload, shopPayload] = await Promise.all([
+      fetchToolPackages(),
       fetchLatestDeliveryExtractBatch(buildExtractQuery()),
       fetchProductCollectionProducts(buildProductQuery()),
       fetchShops(),
     ])
-    modules.value = modulePayload
+    toolPackages.value = packagePayload
     latestBatch.value = latestPayload
     productCollection.value = productPayload
     shops.value = shopPayload
-    ensureActiveTool(modulePayload)
+    ensureActiveTool(packagePayload)
     if (!selectedShopId.value && shopPayload.length > 0) {
       selectedShopId.value = shopPayload[0].id
     }
@@ -155,11 +155,11 @@ async function loadToolCenter() {
   }
 }
 
-function ensureActiveTool(modulePayload: ToolModule[]) {
-  const current = modulePayload.find((module) => module.id === activeToolId.value)
-  if (current?.status === 'active' && hasToolPanel(current.id)) return
+function ensureActiveTool(packagePayload: ToolPackage[]) {
+  const current = packagePayload.find((toolPackage) => toolPackage.id === activeToolId.value)
+  if (current?.status === 'active' && canRenderToolPackage(current)) return
 
-  const fallback = modulePayload.find((module) => module.status === 'active' && hasToolPanel(module.id))
+  const fallback = packagePayload.find((toolPackage) => toolPackage.status === 'active' && canRenderToolPackage(toolPackage))
   if (fallback) {
     activeToolId.value = fallback.id
     localStorage.setItem(activeToolStorageKey, fallback.id)
@@ -190,59 +190,42 @@ function selectTool(tool: (typeof toolCards.value)[number]) {
   isToolPickerOpen.value = false
 }
 
-function hasToolPanel(toolId: string) {
-  return toolId === 'product-research' || toolId === 'delivery-json-extract'
-}
+async function exportToolPackage(tool: (typeof toolCards.value)[number]) {
+  if (!canManageTools.value || exportingToolId.value) return
 
-function toolDisplayMeta(module: ToolModule) {
-  const overrides: Record<string, { name: string; description: string; category: string }> = {
-    'product-research': {
-      name: '商品采集',
-      description: '导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。',
-      category: '店铺运营工具',
-    },
-    'delivery-json-extract': {
-      name: '发货 JSON 提取',
-      description: '解析发货单 JSON，支持查询、分页和 Excel 导出。',
-      category: '数据工具',
-    },
-    'price-monitor': {
-      name: '价格监控',
-      description: '跟踪商品价格、库存和竞品变化。',
-      category: '自动化工具',
-    },
-    'order-assistant': {
-      name: '订单助手',
-      description: '订单同步、异常提醒和履约跟踪。',
-      category: '店铺运营工具',
-    },
-    analytics: {
-      name: '数据看板',
-      description: '销售趋势、利润估算和运营指标分析。',
-      category: '数据工具',
-    },
-  }
-  const override = overrides[module.id]
-  return {
-    name: override?.name ?? module.name,
-    description: override?.description ?? module.description,
-    category: override?.category ?? '店铺运营工具',
+  exportingToolId.value = tool.id
+  apiError.value = ''
+  successMessage.value = ''
+
+  try {
+    const { blob, filename } = await exportToolPackageArchive(tool.id)
+    downloadBlob(blob, filename)
+    successMessage.value = `已导出工具包：${tool.name}。`
+  } catch {
+    apiError.value = '导出工具包失败，请确认后端服务已更新并且当前账号有工具管理权限。'
+  } finally {
+    exportingToolId.value = ''
   }
 }
 
-function toolIcon(toolId: string) {
-  if (toolId === 'delivery-json-extract') return FileJson
-  if (toolId === 'product-research') return Search
+function canRenderToolPackage(toolPackage: ToolPackage) {
+  if (toolPackage.entryType === 'iframe') return Boolean(toolPackage.entryPath)
+  return toolPackage.panelKey === 'product-research' || toolPackage.panelKey === 'delivery-json-extract'
+}
+
+function toolIcon(icon: string) {
+  if (icon === 'file-json') return FileJson
+  if (icon === 'search') return Search
   return Blocks
 }
 
-function toolStatusLabel(status: ToolModule['status'], available: boolean) {
+function toolStatusLabel(status: ToolPackage['status'], available: boolean) {
   if (status === 'active' && available) return '可用'
   if (status === 'paused') return '维护中'
   return '即将上线'
 }
 
-function toolStatusColor(status: ToolModule['status'], available: boolean) {
+function toolStatusColor(status: ToolPackage['status'], available: boolean) {
   if (status === 'active' && available) return 'success'
   if (status === 'paused') return 'warning'
   return 'secondary'
@@ -396,19 +379,23 @@ async function exportDeliveryRows() {
 
   try {
     const { blob, filename } = await exportLatestDeliveryExtractBatch(buildExtractQuery())
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    downloadBlob(blob, filename)
   } catch {
     apiError.value = '导出失败，请稍后重试。'
   } finally {
     isExporting.value = false
   }
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 async function importPastedProductJson() {
@@ -706,18 +693,21 @@ function batchDateToInputValue(batchDate?: string) {
         </div>
 
         <div class="tool-card-grid">
-          <button
+          <article
             v-for="tool in filteredToolCards"
             :key="tool.id"
             class="tool-switch-card"
             :class="[tool.heightClass, { active: tool.isCurrent, disabled: !tool.isAvailable }]"
-            type="button"
+            role="button"
+            tabindex="0"
             @click="selectTool(tool)"
+            @keydown.enter.prevent="selectTool(tool)"
+            @keydown.space.prevent="selectTool(tool)"
           >
             <span class="tool-card-glow"></span>
             <span class="tool-card-topline">
               <span class="tool-card-icon">
-                <component :is="tool.icon" :size="22" />
+                <component :is="tool.iconComponent" :size="22" />
               </span>
               <va-chip size="small" :color="toolStatusColor(tool.status, tool.isAvailable)">
                 {{ toolStatusLabel(tool.status, tool.isAvailable) }}
@@ -731,8 +721,20 @@ function batchDateToInputValue(batchDate?: string) {
               <small v-if="tool.isRecent">最近使用</small>
               <small v-if="tool.isCurrent">当前选中</small>
             </span>
-            <span class="tool-card-action">{{ tool.isAvailable ? '进入工具' : '暂不可用' }}</span>
-          </button>
+            <span class="tool-card-actions">
+              <span class="tool-card-action">{{ tool.isAvailable ? '进入工具' : '暂不可用' }}</span>
+              <button
+                v-if="canManageTools"
+                class="tool-export-button"
+                type="button"
+                :disabled="Boolean(exportingToolId)"
+                @click.stop="exportToolPackage(tool)"
+              >
+                <Download :size="15" />
+                {{ exportingToolId === tool.id ? '导出中' : '导出工具包' }}
+              </button>
+            </span>
+          </article>
         </div>
 
         <div v-if="filteredToolCards.length === 0" class="empty-state">
@@ -762,7 +764,7 @@ function batchDateToInputValue(batchDate?: string) {
     </va-alert>
 
     <div class="tool-list" :aria-busy="isLoading">
-      <div v-for="module in modules" :key="module.id" class="tool-row">
+      <div v-for="module in toolPackages" :key="module.id" class="tool-row">
         <div>
           <strong>{{ module.name }}</strong>
           <span>{{ module.description }}</span>
@@ -774,7 +776,16 @@ function batchDateToInputValue(batchDate?: string) {
     </div>
   </section>
 
-  <section v-if="!isToolPickerOpen && activeToolId === 'product-research'" class="page-panel tool-panel-card">
+  <section v-if="!isToolPickerOpen && activeToolCard?.entryType === 'iframe'" class="page-panel tool-panel-card tool-iframe-panel">
+    <iframe
+      :src="activeToolCard.entryPath"
+      :title="activeToolCard.name"
+      loading="lazy"
+      sandbox="allow-forms allow-same-origin allow-scripts allow-downloads"
+    ></iframe>
+  </section>
+
+  <section v-if="!isToolPickerOpen && activeToolCard?.panelKey === 'product-research'" class="page-panel tool-panel-card">
     <div class="section-heading">
       <div>
         <p class="section-label">商品工具</p>
@@ -918,7 +929,7 @@ function batchDateToInputValue(batchDate?: string) {
     </div>
   </section>
 
-  <section v-if="!isToolPickerOpen && activeToolId === 'delivery-json-extract'" class="page-panel tool-panel-card">
+  <section v-if="!isToolPickerOpen && activeToolCard?.panelKey === 'delivery-json-extract'" class="page-panel tool-panel-card">
     <div class="section-heading">
       <div>
         <p class="section-label">JSON 工具</p>

@@ -1,0 +1,36 @@
+{
+  "toolId": "product-research",
+  "toolName": "商品采集",
+  "version": "1.0.0",
+  "toolDesc": "导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。",
+  "toolIcon": "search",
+  "toolCategory": "店铺运营工具",
+  "toolStatus": "active",
+  "packageType": "builtin",
+  "entryType": "native",
+  "entryPath": "",
+  "panelKey": "product-research",
+  "isRecommended": true,
+  "isRemovable": false,
+  "sortOrder": 10,
+  "permissions": [
+    "tools:view",
+    "tools:manage"
+  ],
+  "backend": {
+    "routes": [
+      "GET /api/tools/product-collection/products",
+      "POST /api/tools/product-collection/import-json",
+      "POST /api/tools/product-collection/products/batch-maintenance",
+      "PUT /api/tools/product-collection/products/{id}"
+    ]
+  },
+  "database": {
+    "tables": [
+      "product_collection_products"
+    ],
+    "installMigrations": [
+      "backend/migrations/012_product_collection.sql"
+    ]
+  }
+}

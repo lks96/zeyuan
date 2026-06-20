@@ -60,6 +60,27 @@ type ToolModule struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+type ToolPackage struct {
+	ID           string    `json:"id"`
+	Version      string    `json:"version"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	Category     string    `json:"category"`
+	Icon         string    `json:"icon"`
+	Status       string    `json:"status"`
+	PackageType  string    `json:"packageType"`
+	EntryType    string    `json:"entryType"`
+	EntryPath    string    `json:"entryPath"`
+	PanelKey     string    `json:"panelKey"`
+	Removable    bool      `json:"removable"`
+	Recommended  bool      `json:"recommended"`
+	SortOrder    int       `json:"sortOrder"`
+	Permissions  []string  `json:"permissions"`
+	ManifestJSON string    `json:"manifestJson"`
+	InstalledAt  time.Time `json:"installedAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
 type DeliveryExtractBatch struct {
 	ID             int64                `json:"id"`
 	SourceFile     string               `json:"sourceFile"`

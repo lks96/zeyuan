@@ -276,6 +276,10 @@ select {
   gap: 14px;
 }
 
+.dashboard-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .metric-card {
   min-height: 116px;
 }
@@ -294,7 +298,33 @@ select {
 }
 
 .metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
+}
+
+.metric-card small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.system-card {
+  align-content: center;
+  padding: 24px;
+}
+
+.system-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.system-card strong {
+  display: block;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
 }
 
 .module-section,
@@ -605,6 +635,42 @@ select {
   font-weight: 800;
 }
 
+.tool-card-actions {
+  display: flex;
+  position: relative;
+  z-index: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.tool-export-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #c2cfe0;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tool-export-button:hover:not(:disabled) {
+  border-color: #154ec1;
+  color: #154ec1;
+}
+
+.tool-export-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .tool-stage-enter-active,
 .tool-stage-leave-active {
   transition:
@@ -620,6 +686,20 @@ select {
 
 .tool-panel-card {
   animation: toolPanelIn 180ms ease both;
+}
+
+.tool-iframe-panel {
+  min-height: min(720px, calc(100vh - 220px));
+  padding: 0;
+  overflow: hidden;
+}
+
+.tool-iframe-panel iframe {
+  display: block;
+  width: 100%;
+  min-height: min(720px, calc(100vh - 220px));
+  border: 0;
+  background: #ffffff;
 }
 
 @keyframes toolPanelIn {

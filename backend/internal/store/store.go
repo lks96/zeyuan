@@ -552,6 +552,115 @@ ORDER BY sort_order ASC, id ASC`
 	return modules, rows.Err()
 }
 
+func (s *Store) ListToolPackages(ctx context.Context) ([]models.ToolPackage, error) {
+	const query = `
+SELECT id, version, name, description, category, icon, status, package_type, entry_type, entry_path,
+       panel_key, removable, recommended, sort_order, permissions_json, manifest_json, installed_at, updated_at
+FROM tool_packages
+ORDER BY sort_order ASC, id ASC`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		if strings.Contains(err.Error(), "tool_packages") {
+			return s.listLegacyToolPackages(ctx)
+		}
+		return nil, err
+	}
+	defer rows.Close()
+
+	packages := make([]models.ToolPackage, 0)
+	for rows.Next() {
+		var pkg models.ToolPackage
+		var permissionsJSON string
+		if err := rows.Scan(
+			&pkg.ID,
+			&pkg.Version,
+			&pkg.Name,
+			&pkg.Description,
+			&pkg.Category,
+			&pkg.Icon,
+			&pkg.Status,
+			&pkg.PackageType,
+			&pkg.EntryType,
+			&pkg.EntryPath,
+			&pkg.PanelKey,
+			&pkg.Removable,
+			&pkg.Recommended,
+			&pkg.SortOrder,
+			&permissionsJSON,
+			&pkg.ManifestJSON,
+			&pkg.InstalledAt,
+			&pkg.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal([]byte(permissionsJSON), &pkg.Permissions); err != nil {
+			pkg.Permissions = []string{}
+		}
+		packages = append(packages, pkg)
+	}
+
+	return packages, rows.Err()
+}
+
+func (s *Store) GetToolPackage(ctx context.Context, id string) (models.ToolPackage, error) {
+	packages, err := s.ListToolPackages(ctx)
+	if err != nil {
+		return models.ToolPackage{}, err
+	}
+
+	for _, pkg := range packages {
+		if pkg.ID == id {
+			return pkg, nil
+		}
+	}
+
+	return models.ToolPackage{}, ErrNotFound
+}
+
+func (s *Store) listLegacyToolPackages(ctx context.Context) ([]models.ToolPackage, error) {
+	modules, err := s.ListToolModules(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	packages := make([]models.ToolPackage, 0, len(modules))
+	for _, module := range modules {
+		pkg := models.ToolPackage{
+			ID:           module.ID,
+			Version:      "1.0.0",
+			Name:         module.Name,
+			Description:  module.Description,
+			Category:     "店铺运营工具",
+			Icon:         "blocks",
+			Status:       module.Status,
+			PackageType:  "builtin",
+			EntryType:    "native",
+			PanelKey:     module.ID,
+			SortOrder:    module.SortOrder,
+			Permissions:  []string{"tools:view", "tools:manage"},
+			InstalledAt:  module.CreatedAt,
+			UpdatedAt:    module.UpdatedAt,
+			ManifestJSON: "{}",
+		}
+		switch module.ID {
+		case "product-research":
+			pkg.Description = "导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。"
+			pkg.Category = "店铺运营工具"
+			pkg.Icon = "search"
+			pkg.Recommended = true
+		case "delivery-json-extract":
+			pkg.Description = "解析发货单 JSON，支持查询、分页和 Excel 导出。"
+			pkg.Category = "数据工具"
+			pkg.Icon = "file-json"
+		}
+		packages = append(packages, pkg)
+	}
+
+	return packages, nil
+}
+
 func (s *Store) UpsertToolModule(ctx context.Context, params UpsertToolModuleParams) (models.ToolModule, error) {
 	const query = `
 INSERT INTO tool_modules (id, name, description, status, sort_order)

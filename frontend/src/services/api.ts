@@ -19,6 +19,27 @@ export interface ToolModule {
   sortOrder?: number
 }
 
+export interface ToolPackage {
+  id: string
+  version: string
+  name: string
+  description: string
+  category: string
+  icon: string
+  status: 'planning' | 'active' | 'paused'
+  packageType: 'builtin' | 'installed'
+  entryType: 'native' | 'iframe'
+  entryPath: string
+  panelKey: string
+  removable: boolean
+  recommended: boolean
+  sortOrder: number
+  permissions: string[]
+  manifestJson: string
+  installedAt: string
+  updatedAt: string
+}
+
 export interface DeliveryExtractRow {
   id: number
   batchId?: number
@@ -311,6 +332,92 @@ export async function fetchHealth() {
 export async function fetchModules() {
   const response = await api.get<ApiEnvelope<ToolModule[]>>('/modules')
   return response.data.data
+}
+
+export async function fetchToolPackages() {
+  try {
+    const response = await api.get<ApiEnvelope<ToolPackage[]>>('/tool-packages')
+    return response.data.data
+  } catch {
+    const modules = await fetchModules()
+    return modules.map(moduleToToolPackage)
+  }
+}
+
+export async function exportToolPackageArchive(toolId: string) {
+  const response = await api.get<Blob>(`/tool-packages/${toolId}/export`, {
+    responseType: 'blob',
+  })
+  const disposition = response.headers['content-disposition'] as string | undefined
+  const filename = filenameFromDisposition(disposition) || `${toolId}.tool.zip`
+  return { blob: response.data, filename }
+}
+
+function moduleToToolPackage(module: ToolModule): ToolPackage {
+  const meta = legacyToolMeta(module)
+  const now = new Date().toISOString()
+  return {
+    id: module.id,
+    version: '1.0.0',
+    name: meta.name,
+    description: meta.description,
+    category: meta.category,
+    icon: meta.icon,
+    status: module.status,
+    packageType: 'builtin',
+    entryType: 'native',
+    entryPath: '',
+    panelKey: module.id,
+    removable: false,
+    recommended: module.id === 'product-research',
+    sortOrder: module.sortOrder ?? 100,
+    permissions: ['tools:view', 'tools:manage'],
+    manifestJson: '{}',
+    installedAt: now,
+    updatedAt: now,
+  }
+}
+
+function legacyToolMeta(module: ToolModule) {
+  const overrides: Record<string, { name: string; description: string; category: string; icon: string }> = {
+    'product-research': {
+      name: '商品采集',
+      description: '导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。',
+      category: '店铺运营工具',
+      icon: 'search',
+    },
+    'delivery-json-extract': {
+      name: '发货 JSON 提取',
+      description: '解析发货单 JSON，支持查询、分页和 Excel 导出。',
+      category: '数据工具',
+      icon: 'file-json',
+    },
+    'price-monitor': {
+      name: '价格监控',
+      description: '跟踪商品价格、库存和竞品变化。',
+      category: '自动化工具',
+      icon: 'blocks',
+    },
+    'order-assistant': {
+      name: '订单助手',
+      description: '订单同步、异常提醒和履约跟踪。',
+      category: '店铺运营工具',
+      icon: 'blocks',
+    },
+    analytics: {
+      name: '数据看板',
+      description: '销售趋势、利润估算和运营指标分析。',
+      category: '数据工具',
+      icon: 'blocks',
+    },
+  }
+
+  return overrides[module.id] ?? {
+    name: module.name,
+    description: module.description,
+    category: '店铺运营工具',
+    icon: 'blocks',
+  }
 }
 
 export async function saveModule(payload: ToolModule) {

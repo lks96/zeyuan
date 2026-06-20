@@ -124,6 +124,31 @@ CREATE TABLE IF NOT EXISTS tool_modules (
   KEY idx_tool_modules_sort_order (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具中心模块表';
 
+CREATE TABLE IF NOT EXISTS tool_packages (
+  id VARCHAR(64) NOT NULL COMMENT '工具包ID',
+  version VARCHAR(32) NOT NULL DEFAULT '1.0.0' COMMENT '工具包版本',
+  name VARCHAR(128) NOT NULL COMMENT '工具名称',
+  description VARCHAR(255) NOT NULL DEFAULT '' COMMENT '工具说明',
+  category VARCHAR(64) NOT NULL DEFAULT '店铺运营工具' COMMENT '工具分类',
+  icon VARCHAR(64) NOT NULL DEFAULT 'blocks' COMMENT '工具图标',
+  status ENUM('planning', 'active', 'paused') NOT NULL DEFAULT 'planning' COMMENT '工具状态',
+  package_type ENUM('builtin', 'installed') NOT NULL DEFAULT 'builtin' COMMENT '工具包类型',
+  entry_type ENUM('native', 'iframe') NOT NULL DEFAULT 'native' COMMENT '前端入口类型',
+  entry_path VARCHAR(500) NOT NULL DEFAULT '' COMMENT '前端入口路径',
+  panel_key VARCHAR(64) NOT NULL DEFAULT '' COMMENT '内置面板标识',
+  removable TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否允许卸载',
+  recommended TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否推荐',
+  sort_order INT NOT NULL DEFAULT 100 COMMENT '排序值',
+  permissions_json TEXT NOT NULL COMMENT '工具权限声明JSON',
+  manifest_json LONGTEXT NOT NULL COMMENT '工具包清单JSON',
+  installed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '安装时间',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  KEY idx_tool_packages_status (status),
+  KEY idx_tool_packages_category (category),
+  KEY idx_tool_packages_sort_order (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='工具包安装表';
+
 CREATE TABLE IF NOT EXISTS system_settings (
   setting_key VARCHAR(80) NOT NULL COMMENT '设置键',
   setting_value VARCHAR(500) NOT NULL DEFAULT '' COMMENT '设置值',
@@ -285,6 +310,90 @@ ON DUPLICATE KEY UPDATE
   status = VALUES(status),
   sort_order = VALUES(sort_order);
 
+INSERT INTO tool_packages (
+  id, version, name, description, category, icon, status, package_type, entry_type, entry_path,
+  panel_key, removable, recommended, sort_order, permissions_json, manifest_json
+)
+VALUES
+  (
+    'product-research',
+    '1.0.0',
+    '商品采集',
+    '导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。',
+    '店铺运营工具',
+    'search',
+    'active',
+    'builtin',
+    'native',
+    '',
+    'product-research',
+    0,
+    1,
+    10,
+    JSON_ARRAY('tools:view', 'tools:manage'),
+    JSON_OBJECT(
+      'toolId', 'product-research',
+      'toolName', '商品采集',
+      'version', '1.0.0',
+      'toolDesc', '导入店铺商品 JSON，维护 SKC、SKU、价格、成本和产品配置。',
+      'toolIcon', 'search',
+      'toolCategory', '店铺运营工具',
+      'toolStatus', 'active',
+      'packageType', 'builtin',
+      'entryType', 'native',
+      'panelKey', 'product-research',
+      'isRecommended', true,
+      'sortOrder', 10
+    )
+  ),
+  (
+    'delivery-json-extract',
+    '1.0.0',
+    '发货 JSON 提取',
+    '解析发货单 JSON，支持查询、分页和 Excel 导出。',
+    '数据工具',
+    'file-json',
+    'active',
+    'builtin',
+    'native',
+    '',
+    'delivery-json-extract',
+    0,
+    0,
+    15,
+    JSON_ARRAY('tools:view', 'tools:manage'),
+    JSON_OBJECT(
+      'toolId', 'delivery-json-extract',
+      'toolName', '发货 JSON 提取',
+      'version', '1.0.0',
+      'toolDesc', '解析发货单 JSON，支持查询、分页和 Excel 导出。',
+      'toolIcon', 'file-json',
+      'toolCategory', '数据工具',
+      'toolStatus', 'active',
+      'packageType', 'builtin',
+      'entryType', 'native',
+      'panelKey', 'delivery-json-extract',
+      'isRecommended', false,
+      'sortOrder', 15
+    )
+  )
+ON DUPLICATE KEY UPDATE
+  version = VALUES(version),
+  name = VALUES(name),
+  description = VALUES(description),
+  category = VALUES(category),
+  icon = VALUES(icon),
+  status = VALUES(status),
+  package_type = VALUES(package_type),
+  entry_type = VALUES(entry_type),
+  entry_path = VALUES(entry_path),
+  panel_key = VALUES(panel_key),
+  removable = VALUES(removable),
+  recommended = VALUES(recommended),
+  sort_order = VALUES(sort_order),
+  permissions_json = VALUES(permissions_json),
+  manifest_json = VALUES(manifest_json);
+
 INSERT INTO system_settings (setting_key, setting_value, description, updated_by)
 VALUES
   ('api_base_url', '', '后端 API 基础地址', 1),
@@ -310,7 +419,8 @@ VALUES
   ('010', '010_remove_api_verification_extract.sql', '2560f2a1da4d54514c8c2c43d3cd9f7772ad182fe2881c3a7f1d7b37d32272b6'),
   ('011', '011_add_schema_comments.sql', '6f342343b4ddf34060439592e15c91949f4ec71866f545370f16efdfa4092674'),
   ('012', '012_product_collection.sql', 'd7243c493d715f6e99bff20c62c9d3b84dfce0fec016d32baa6c75fef09d6112'),
-  ('013', '013_delivery_extract_express_batch.sql', '0291043eb5b65c079bb2a1f534af29dc116bcb62069698ebfea3977bbace9b9b')
+  ('013', '013_delivery_extract_express_batch.sql', '0291043eb5b65c079bb2a1f534af29dc116bcb62069698ebfea3977bbace9b9b'),
+  ('014', '014_tool_packages.sql', '4e6c8b2dcb8c202beda1a36d21560eb4d0e0bf698fe02cdae073f3a678e312c0')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   checksum = VALUES(checksum);
