@@ -102,13 +102,6 @@ select {
   width: 100%;
 }
 
-.login-demo {
-  display: grid;
-  gap: 6px;
-  color: #64748b;
-  font-size: 13px;
-}
-
 .sidebar {
   display: flex;
   flex-direction: column;

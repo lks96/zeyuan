@@ -7,8 +7,8 @@ import { login } from '@/services/api'
 const route = useRoute()
 const router = useRouter()
 
-const username = ref('admin')
-const password = ref('admin123')
+const username = ref('')
+const password = ref('')
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
@@ -61,11 +61,6 @@ async function submitLogin() {
           登录
         </va-button>
       </form>
-
-      <div class="login-demo">
-        <span>管理员：admin / admin123</span>
-        <span>普通用户：operator_a / operator123</span>
-      </div>
     </section>
   </main>
 </template>

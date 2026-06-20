@@ -11,11 +11,30 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- 生产执行前必须修改这里的初始管理员密码。
+-- 后端密码规则为 SHA256(username + ':' + password)，脚本会自动生成 password_hash。
+SET @admin_username = 'admin';
+SET @admin_initial_password = 'CHANGE_ME_BEFORE_RUN';
+SET @admin_display_name = '系统管理员';
+
 CREATE DATABASE IF NOT EXISTS `zeyuan_db`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
 USE `zeyuan_db`;
+
+DROP PROCEDURE IF EXISTS ensure_admin_password_changed;
+DELIMITER //
+CREATE PROCEDURE ensure_admin_password_changed()
+BEGIN
+  IF @admin_initial_password = 'CHANGE_ME_BEFORE_RUN' OR CHAR_LENGTH(@admin_initial_password) < 12 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = '请先修改 init_zeyuan_db.sql 中的 @admin_initial_password，且长度至少 12 位。';
+  END IF;
+END//
+DELIMITER ;
+CALL ensure_admin_password_changed();
+DROP PROCEDURE ensure_admin_password_changed;
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version VARCHAR(32) NOT NULL COMMENT '迁移版本号',
@@ -194,7 +213,7 @@ CREATE TABLE IF NOT EXISTS product_collection_products (
 
 INSERT INTO users (id, username, password_hash, display_name, role, status)
 VALUES
-  (1, 'admin', 'bf6b5bdb74c79ece9fc0ad0ac9fb0359f9555d4f35a83b2e6ec69ae99e09603d', 'System Admin', 'admin', 'active')
+  (1, @admin_username, SHA2(CONCAT(@admin_username, ':', @admin_initial_password), 256), @admin_display_name, 'admin', 'active')
 ON DUPLICATE KEY UPDATE
   password_hash = VALUES(password_hash),
   display_name = VALUES(display_name),
