@@ -350,6 +350,24 @@ select {
   min-height: 220px;
 }
 
+.module-card-clickable {
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.module-card-clickable:hover:not(.disabled) {
+  transform: translateY(-3px);
+  border-color: rgba(15, 118, 110, 0.34);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+}
+
+.module-card-clickable.disabled {
+  cursor: not-allowed;
+}
+
 .module-card .va-card__content {
   display: flex;
   min-height: 220px;

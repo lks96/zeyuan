@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Blocks,
   ChevronLeft,
@@ -35,6 +36,9 @@ import {
 const defaultPageSize = 10
 const activeToolStorageKey = 'temu-tools-active-tool'
 const recentToolsStorageKey = 'temu-tools-recent-tools'
+
+const route = useRoute()
+const router = useRouter()
 
 const canManageTools = computed(() => hasPermission('tools:manage'))
 
@@ -78,7 +82,7 @@ const previewImageTitle = ref('')
 const isToolPickerOpen = ref(false)
 const toolSearchText = ref('')
 const selectedToolCategory = ref('全部')
-const activeToolId = ref(localStorage.getItem(activeToolStorageKey) || 'product-research')
+const activeToolId = ref(routeToolId() || localStorage.getItem(activeToolStorageKey) || 'product-research')
 const recentToolIds = ref(loadRecentToolIds())
 
 const latestRows = computed(() => latestBatch.value?.data ?? [])
@@ -129,6 +133,13 @@ const activeToolCard = computed(() => {
 
 onMounted(loadToolCenter)
 
+watch(
+  () => route.query.tool,
+  () => {
+    applyRouteToolSelection()
+  },
+)
+
 async function loadToolCenter() {
   isLoading.value = true
   apiError.value = ''
@@ -156,6 +167,15 @@ async function loadToolCenter() {
 }
 
 function ensureActiveTool(packagePayload: ToolPackage[]) {
+  const routeTool = routeToolId()
+  if (routeTool) {
+    const target = packagePayload.find((toolPackage) => toolPackage.id === routeTool)
+    if (target?.status === 'active' && canRenderToolPackage(target)) {
+      activateTool(target.id)
+      return
+    }
+  }
+
   const current = packagePayload.find((toolPackage) => toolPackage.id === activeToolId.value)
   if (current?.status === 'active' && canRenderToolPackage(current)) return
 
@@ -182,12 +202,43 @@ function selectTool(tool: (typeof toolCards.value)[number]) {
     return
   }
 
-  activeToolId.value = tool.id
-  localStorage.setItem(activeToolStorageKey, tool.id)
-  recordRecentTool(tool.id)
+  activateTool(tool.id)
   apiError.value = ''
   successMessage.value = ''
   isToolPickerOpen.value = false
+
+  if (route.query.tool !== tool.id) {
+    router.replace({
+      name: 'tools',
+      query: {
+        ...route.query,
+        tool: tool.id,
+      },
+    })
+  }
+}
+
+function activateTool(toolId: string) {
+  activeToolId.value = toolId
+  localStorage.setItem(activeToolStorageKey, toolId)
+  recordRecentTool(toolId)
+}
+
+function applyRouteToolSelection() {
+  const targetId = routeToolId()
+  if (!targetId || targetId === activeToolId.value) return
+
+  const target = toolPackages.value.find((toolPackage) => toolPackage.id === targetId)
+  if (target?.status === 'active' && canRenderToolPackage(target)) {
+    activateTool(target.id)
+    isToolPickerOpen.value = false
+    apiError.value = ''
+  }
+}
+
+function routeToolId() {
+  const tool = route.query.tool
+  return typeof tool === 'string' ? tool.trim() : ''
 }
 
 async function exportToolPackage(tool: (typeof toolCards.value)[number]) {

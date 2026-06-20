@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ArrowRight, Blocks, Database, Package, RefreshCw, Store, Users } from '@lucide/vue'
 import {
   fetchHealth,
@@ -9,6 +10,8 @@ import {
   type TenantSummary,
   type ToolPackage,
 } from '@/services/api'
+
+const router = useRouter()
 
 const toolPackages = ref<ToolPackage[]>([])
 const health = ref<HealthPayload | null>(null)
@@ -77,6 +80,17 @@ function toolStatusColor(status: ToolPackage['status']) {
   if (status === 'active') return 'success'
   if (status === 'paused') return 'warning'
   return 'secondary'
+}
+
+function openTool(tool: ToolPackage) {
+  if (tool.status !== 'active') return
+
+  router.push({
+    name: 'tools',
+    query: {
+      tool: tool.id,
+    },
+  })
 }
 </script>
 
@@ -163,7 +177,17 @@ function toolStatusColor(status: ToolPackage['status']) {
     </div>
 
     <div class="module-grid">
-      <va-card v-for="tool in visibleToolPackages" :key="tool.id" class="module-card">
+      <va-card
+        v-for="tool in visibleToolPackages"
+        :key="tool.id"
+        class="module-card module-card-clickable"
+        :class="{ disabled: tool.status !== 'active' }"
+        role="button"
+        tabindex="0"
+        @click="openTool(tool)"
+        @keydown.enter.prevent="openTool(tool)"
+        @keydown.space.prevent="openTool(tool)"
+      >
         <va-card-content>
           <div class="module-card-header">
             <div class="module-icon">
@@ -180,7 +204,7 @@ function toolStatusColor(status: ToolPackage['status']) {
             <small>{{ tool.packageType === 'builtin' ? '内置工具' : '已安装工具' }}</small>
             <small v-if="tool.recommended">推荐</small>
           </div>
-          <va-button preset="secondary" :disabled="tool.status !== 'active'" to="/tools">
+          <va-button preset="secondary" :disabled="tool.status !== 'active'" @click.stop="openTool(tool)">
             进入工具中心
             <ArrowRight :size="17" />
           </va-button>
