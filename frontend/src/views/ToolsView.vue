@@ -64,6 +64,7 @@ const selectedShopId = ref<number | ''>('')
 const searchText = ref('')
 const activeQuery = ref('')
 const currentPage = ref(1)
+const selectedDeliveryRowIds = ref<number[]>([])
 const selectedDate = ref(todayInputValue())
 const fileInput = ref<HTMLInputElement | null>(null)
 const productFileInput = ref<HTMLInputElement | null>(null)
@@ -90,6 +91,11 @@ const rowsTotal = computed(() => latestBatch.value?.rowsTotal ?? latestBatch.val
 const totalPages = computed(() => Math.max(1, Math.ceil(rowsTotal.value / defaultPageSize)))
 const rangeStart = computed(() => (rowsTotal.value === 0 ? 0 : (currentPage.value - 1) * defaultPageSize + 1))
 const rangeEnd = computed(() => Math.min(currentPage.value * defaultPageSize, rowsTotal.value))
+const currentDeliveryRowIds = computed(() => latestRows.value.map((row) => row.id))
+const selectedDeliveryRowCount = computed(() => selectedDeliveryRowIds.value.length)
+const allCurrentDeliveryRowsSelected = computed(() => {
+  return currentDeliveryRowIds.value.length > 0 && currentDeliveryRowIds.value.every((rowId) => selectedDeliveryRowIds.value.includes(rowId))
+})
 const productRows = computed(() => productCollection.value?.data ?? [])
 const productRowsTotal = computed(() => productCollection.value?.rowsTotal ?? 0)
 const productTotalPages = computed(() => Math.max(1, Math.ceil(productRowsTotal.value / defaultPageSize)))
@@ -143,16 +149,20 @@ watch(
 async function loadToolCenter() {
   isLoading.value = true
   apiError.value = ''
+  currentPage.value = 1
+  clearSelectedDeliveryRows()
 
   try {
     const [packagePayload, latestPayload, productPayload, shopPayload] = await Promise.all([
       fetchToolPackages(),
-      fetchLatestDeliveryExtractBatch(buildExtractQuery()),
+      fetchLatestDeliveryExtractBatch(buildLatestExtractQuery()),
       fetchProductCollectionProducts(buildProductQuery()),
       fetchShops(),
     ])
     toolPackages.value = packagePayload
     latestBatch.value = latestPayload
+    const latestDate = batchDateToInputValue(latestPayload?.date)
+    selectedDate.value = latestDate || todayInputValue()
     productCollection.value = productPayload
     shops.value = shopPayload
     ensureActiveTool(packagePayload)
@@ -340,7 +350,24 @@ function buildExtractQuery() {
   }
 }
 
+function buildLatestExtractQuery() {
+  return {
+    page: 1,
+    pageSize: defaultPageSize,
+    q: activeQuery.value || undefined,
+  }
+}
+
+function buildExtractExportQuery() {
+  return {
+    q: activeQuery.value || undefined,
+    batchDate: selectedDate.value || undefined,
+    rowIds: selectedDeliveryRowIds.value.length > 0 ? selectedDeliveryRowIds.value : undefined,
+  }
+}
+
 async function changeExtractDate() {
+  clearSelectedDeliveryRows()
   currentPage.value = 1
   await loadLatestExtract()
 }
@@ -429,7 +456,7 @@ async function exportDeliveryRows() {
   apiError.value = ''
 
   try {
-    const { blob, filename } = await exportLatestDeliveryExtractBatch(buildExtractQuery())
+    const { blob, filename } = await exportLatestDeliveryExtractBatch(buildExtractExportQuery())
     downloadBlob(blob, filename)
   } catch {
     apiError.value = '导出失败，请稍后重试。'
@@ -527,13 +554,14 @@ async function importJsonContent(content: string, sourceName: string) {
   apiError.value = ''
   successMessage.value = ''
 
-  try {
-    searchText.value = ''
-    activeQuery.value = ''
-    currentPage.value = 1
-    latestBatch.value = await importDeliveryExtractJson({
-      sourceName,
-      content: cleanContent,
+    try {
+      searchText.value = ''
+      activeQuery.value = ''
+      clearSelectedDeliveryRows()
+      currentPage.value = 1
+      latestBatch.value = await importDeliveryExtractJson({
+        sourceName,
+        content: cleanContent,
     })
     const importedDate = batchDateToInputValue(latestBatch.value.date)
     if (importedDate) {
@@ -570,6 +598,7 @@ async function clearProductSearch() {
 
 async function searchDeliveryRows() {
   activeQuery.value = searchText.value.trim()
+  clearSelectedDeliveryRows()
   currentPage.value = 1
   await loadLatestExtract()
 }
@@ -579,6 +608,7 @@ async function clearDeliverySearch() {
 
   searchText.value = ''
   activeQuery.value = ''
+  clearSelectedDeliveryRows()
   currentPage.value = 1
   await loadLatestExtract()
 }
@@ -595,6 +625,34 @@ async function goToPage(page: number) {
 
   currentPage.value = page
   await loadLatestExtract()
+}
+
+function isDeliveryRowSelected(rowId: number) {
+  return selectedDeliveryRowIds.value.includes(rowId)
+}
+
+function toggleDeliveryRow(rowId: number, checked: boolean) {
+  if (checked && !selectedDeliveryRowIds.value.includes(rowId)) {
+    selectedDeliveryRowIds.value = [...selectedDeliveryRowIds.value, rowId]
+  }
+  if (!checked) {
+    selectedDeliveryRowIds.value = selectedDeliveryRowIds.value.filter((selectedRowId) => selectedRowId !== rowId)
+  }
+}
+
+function toggleCurrentDeliveryRows(checked: boolean) {
+  if (checked) {
+    const rowIds = new Set([...selectedDeliveryRowIds.value, ...currentDeliveryRowIds.value])
+    selectedDeliveryRowIds.value = Array.from(rowIds)
+    return
+  }
+
+  const currentRowIds = new Set(currentDeliveryRowIds.value)
+  selectedDeliveryRowIds.value = selectedDeliveryRowIds.value.filter((rowId) => !currentRowIds.has(rowId))
+}
+
+function clearSelectedDeliveryRows() {
+  selectedDeliveryRowIds.value = []
 }
 
 function openEditProduct(product: ProductCollectionProduct) {
@@ -1052,7 +1110,15 @@ function batchDateToInputValue(batchDate?: string) {
 
     <div v-else class="data-table">
       <div class="data-table-row data-table-head extract-table-row">
-        <span>ID</span>
+        <span class="selection-cell">
+          <input
+            type="checkbox"
+            aria-label="选择当前页"
+            :checked="allCurrentDeliveryRowsSelected"
+            :disabled="latestRows.length === 0"
+            @change="toggleCurrentDeliveryRows(($event.target as HTMLInputElement).checked)"
+          />
+        </span>
         <span>店铺</span>
         <span>商品</span>
         <span>发货批次</span>
@@ -1065,7 +1131,14 @@ function batchDateToInputValue(batchDate?: string) {
         没有匹配的导入记录
       </div>
       <div v-for="row in latestRows" :key="row.id" class="data-table-row extract-table-row">
-        <span>{{ row.id }}</span>
+        <span class="selection-cell">
+          <input
+            type="checkbox"
+            :aria-label="`选择 ${row.deliveryOrderSn}`"
+            :checked="isDeliveryRowSelected(row.id)"
+            @change="toggleDeliveryRow(row.id, ($event.target as HTMLInputElement).checked)"
+          />
+        </span>
         <span>
           <strong>{{ row.shopName || row.supplierId || '-' }}</strong>
         </span>
@@ -1090,7 +1163,10 @@ function batchDateToInputValue(batchDate?: string) {
     </div>
 
     <div v-if="latestBatch" class="pagination-bar">
-      <span>共 {{ rowsTotal }} 条，显示 {{ rangeStart }}-{{ rangeEnd }}，每页 {{ defaultPageSize }} 条</span>
+      <span>
+        共 {{ rowsTotal }} 条，显示 {{ rangeStart }}-{{ rangeEnd }}，每页 {{ defaultPageSize }} 条
+        <template v-if="selectedDeliveryRowCount > 0">，已选 {{ selectedDeliveryRowCount }} 条</template>
+      </span>
       <div class="segmented-actions">
         <va-button preset="secondary" :disabled="currentPage <= 1 || isSearching" @click="goToPage(currentPage - 1)">
           <ChevronLeft :size="18" />

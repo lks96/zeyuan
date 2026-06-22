@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -524,13 +525,66 @@ func (app appServer) handleExportLatestDeliveryExtractBatch(w http.ResponseWrite
 		return
 	}
 
-	filename := fmt.Sprintf("delivery-extract-%s.xlsx", batch.BatchDate)
+	filename := deliveryExtractExportFilename(batch, time.Now())
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Disposition", deliveryExportContentDisposition(filename))
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(workbook); err != nil {
 		log.Printf("failed to write export workbook: %v", err)
 	}
+}
+
+func deliveryExtractExportFilename(batch models.DeliveryExtractBatch, now time.Time) string {
+	name := "发货提取"
+	if len(batch.Rows) > 0 {
+		firstRow := batch.Rows[0]
+		name = strings.TrimSpace(firstRow.EuRepresentative)
+		if name == "" {
+			name = strings.TrimSpace(firstRow.ShopName)
+		}
+		if name == "" {
+			name = strings.TrimSpace(firstRow.SupplierID)
+		}
+	}
+
+	name = safeDeliveryExportFilenamePart(name)
+	if name == "" {
+		name = "发货提取"
+	}
+
+	exportDate := now
+	if now.Hour() >= 16 {
+		exportDate = exportDate.AddDate(0, 0, 1)
+	}
+
+	return fmt.Sprintf("%s%d-%d.xlsx", name, int(exportDate.Month()), exportDate.Day())
+}
+
+func safeDeliveryExportFilenamePart(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, char := range value {
+		if char < 32 {
+			continue
+		}
+		switch char {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			builder.WriteRune('-')
+		default:
+			builder.WriteRune(char)
+		}
+	}
+
+	return strings.TrimSpace(builder.String())
+}
+
+func deliveryExportContentDisposition(filename string) string {
+	encodedFilename := url.PathEscape(filename)
+	return fmt.Sprintf(`attachment; filename="delivery-extract.xlsx"; filename*=UTF-8''%s`, encodedFilename)
 }
 
 func (app appServer) handleImportDeliveryExtractSource(w http.ResponseWriter, r *http.Request, user models.User) {
@@ -1226,9 +1280,33 @@ func deliveryExtractRowsOptionsFromRequest(r *http.Request) store.DeliveryExtrac
 	return store.DeliveryExtractRowsOptions{
 		Query:     strings.TrimSpace(query.Get("q")),
 		BatchDate: normalizeDeliveryBatchDate(query.Get("batchDate")),
+		RowIDs:    deliveryExtractRowIDsFromQuery(query),
 		Page:      positiveQueryInt(query.Get("page"), 1, 0),
 		PageSize:  positiveQueryInt(query.Get("pageSize"), defaultPageSize, maxPageSize),
 	}
+}
+
+func deliveryExtractRowIDsFromQuery(query url.Values) []int64 {
+	rawValues := append([]string{}, query["rowIds"]...)
+	rawValues = append(rawValues, query["rowIds[]"]...)
+
+	rowIDs := make([]int64, 0, len(rawValues))
+	seen := make(map[int64]bool)
+	for _, rawValue := range rawValues {
+		parts := strings.FieldsFunc(rawValue, func(char rune) bool {
+			return char == ',' || char == ' '
+		})
+		for _, part := range parts {
+			rowID, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+			if err != nil || rowID <= 0 || seen[rowID] {
+				continue
+			}
+			seen[rowID] = true
+			rowIDs = append(rowIDs, rowID)
+		}
+	}
+
+	return rowIDs
 }
 
 func productCollectionProductsOptionsFromRequest(r *http.Request) store.ProductCollectionProductsOptions {

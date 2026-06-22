@@ -849,7 +849,7 @@ select {
 }
 
 .extract-table-row {
-  grid-template-columns: 64px minmax(130px, 0.8fr) minmax(240px, 1.6fr) minmax(150px, 1fr) minmax(140px, 1fr) minmax(120px, 0.75fr) minmax(120px, 0.75fr) minmax(130px, 0.8fr);
+  grid-template-columns: 42px minmax(130px, 0.8fr) minmax(240px, 1.6fr) minmax(150px, 1fr) minmax(140px, 1fr) minmax(120px, 0.75fr) minmax(120px, 0.75fr) minmax(130px, 0.8fr);
 }
 
 .product-table-row {
@@ -866,6 +866,19 @@ select {
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.selection-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selection-cell input {
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+  cursor: pointer;
 }
 
 .extract-product-cell img {

@@ -67,6 +67,7 @@ type SaveDeliveryExtractParams struct {
 type DeliveryExtractRowsOptions struct {
 	Query     string
 	BatchDate string
+	RowIDs    []int64
 	Page      int
 	PageSize  int
 	AllRows   bool
@@ -904,6 +905,14 @@ LIMIT 1`
 		rowWhereClause += " AND (r.product_name LIKE ? OR r.delivery_order_sn LIKE ? OR r.express_batch_sn LIKE ? OR r.skc LIKE ? OR r.sku LIKE ?)"
 		keyword := "%" + options.Query + "%"
 		args = append(args, keyword, keyword, keyword, keyword, keyword)
+	}
+	if len(options.RowIDs) > 0 {
+		placeholders := strings.TrimRight(strings.Repeat("?,", len(options.RowIDs)), ",")
+		countWhereClause += " AND id IN (" + placeholders + ")"
+		rowWhereClause += " AND r.id IN (" + placeholders + ")"
+		for _, rowID := range options.RowIDs {
+			args = append(args, rowID)
+		}
 	}
 
 	countQuery := "SELECT COUNT(*) FROM delivery_extract_rows " + countWhereClause

@@ -75,6 +75,7 @@ export interface DeliveryExtractBatch {
 export interface DeliveryExtractQuery {
   q?: string
   batchDate?: string
+  rowIds?: number[]
   page?: number
   pageSize?: number
 }
@@ -481,6 +482,17 @@ export async function batchUpdateProductCollectionMaintenance(content: string, p
 
 function filenameFromDisposition(disposition?: string) {
   if (!disposition) return ''
+  const encodedMatch = disposition.match(/filename\*\s*=\s*([^;]+)/i)
+  if (encodedMatch?.[1]) {
+    const encodedValue = encodedMatch[1].trim().replace(/^"|"$/g, '')
+    const filenameValue = encodedValue.includes("''") ? encodedValue.split("''").slice(1).join("''") : encodedValue
+    try {
+      return decodeURIComponent(filenameValue)
+    } catch {
+      return filenameValue
+    }
+  }
+
   const match = disposition.match(/filename="?([^";]+)"?/i)
   return match?.[1] ?? ''
 }
