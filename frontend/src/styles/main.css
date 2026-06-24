@@ -689,6 +689,25 @@ select {
   opacity: 0.58;
 }
 
+.tool-extension-download {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.tool-extension-download:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .tool-stage-enter-active,
 .tool-stage-leave-active {
   transition:

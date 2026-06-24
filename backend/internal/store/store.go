@@ -48,6 +48,16 @@ type UpdateShopParams struct {
 	Status           string
 }
 
+type UpsertShopParams struct {
+	ShopName         string
+	Platform         string
+	ExternalCode     string
+	EuRepresentative string
+	ShopURL          string
+	Status           string
+	CreatedBy        int64
+}
+
 type UpsertToolModuleParams struct {
 	ID          string
 	Name        string
@@ -421,6 +431,57 @@ VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
 		return models.Shop{}, err
 	}
 	return s.GetShop(ctx, id)
+}
+
+func (s *Store) UpsertShopByExternalCode(ctx context.Context, params UpsertShopParams) (models.Shop, error) {
+	const query = `
+INSERT INTO shops (shop_name, platform, external_code, eu_representative, shop_url, status, created_by)
+VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  shop_name = VALUES(shop_name),
+  eu_representative = VALUES(eu_representative),
+  shop_url = VALUES(shop_url),
+  status = VALUES(status)`
+
+	if _, err := s.db.ExecContext(
+		ctx,
+		query,
+		params.ShopName,
+		params.Platform,
+		params.ExternalCode,
+		params.EuRepresentative,
+		params.ShopURL,
+		params.Status,
+		params.CreatedBy,
+	); err != nil {
+		return models.Shop{}, err
+	}
+
+	return s.GetShopByPlatformExternalCode(ctx, params.Platform, params.ExternalCode)
+}
+
+func (s *Store) GetShopByPlatformExternalCode(ctx context.Context, platform string, externalCode string) (models.Shop, error) {
+	const query = `
+SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, shop_url, status, created_at
+FROM shops
+WHERE platform = ? AND external_code = ?
+LIMIT 1`
+
+	var shop models.Shop
+	err := s.db.QueryRowContext(ctx, query, platform, externalCode).Scan(
+		&shop.ID,
+		&shop.ShopName,
+		&shop.Platform,
+		&shop.ExternalCode,
+		&shop.EuRepresentative,
+		&shop.ShopURL,
+		&shop.Status,
+		&shop.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return models.Shop{}, ErrNotFound
+	}
+	return shop, err
 }
 
 func (s *Store) UpdateShop(ctx context.Context, id int64, params UpdateShopParams) (models.Shop, error) {

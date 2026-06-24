@@ -133,6 +133,21 @@ type productCollectionImportRequest struct {
 	ShopID     int64  `json:"shopId"`
 }
 
+type extensionSellerShopSyncRequest struct {
+	SourceName string `json:"sourceName"`
+	Content    string `json:"content"`
+}
+
+type extensionSellerShopSyncResponse struct {
+	Shops []models.Shop `json:"shops"`
+}
+
+type sellerShopCandidate struct {
+	ExternalCode string
+	ShopName     string
+	ShopURL      string
+}
+
 type updateProductCollectionProductRequest struct {
 	ProductConfig string `json:"productConfig"`
 	CostPriceCent int    `json:"costPrice"`
@@ -298,6 +313,7 @@ func (app appServer) routes() http.Handler {
 	mux.HandleFunc("POST /api/tools/product-collection/import-json", app.requirePermission("tools:manage", app.handleImportProductCollectionJSON))
 	mux.HandleFunc("POST /api/tools/product-collection/products/batch-maintenance", app.requirePermission("tools:manage", app.handleBatchUpdateProductCollectionMaintenance))
 	mux.HandleFunc("PUT /api/tools/product-collection/products/{id}", app.requirePermission("tools:manage", app.handleUpdateProductCollectionProduct))
+	mux.HandleFunc("POST /api/extension/seller-shops/sync", app.authenticated(app.handleSyncExtensionSellerShops))
 	mux.HandleFunc("GET /api/me", app.authenticated(app.handleMe))
 	mux.HandleFunc("GET /api/tenant/summary", app.requirePermission("dashboard:view", app.handleTenantSummary))
 	mux.HandleFunc("GET /api/settings", app.requirePermission("settings:view", app.handleSettings))
@@ -773,6 +789,56 @@ func (app appServer) handleUpdateProductCollectionProduct(w http.ResponseWriter,
 	}
 
 	writeJSON(w, http.StatusOK, apiResponse{Data: product})
+}
+
+func (app appServer) handleSyncExtensionSellerShops(w http.ResponseWriter, r *http.Request, user models.User) {
+	var request extensionSellerShopSyncRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	request.Content = strings.TrimSpace(request.Content)
+	if request.Content == "" {
+		writeError(w, http.StatusBadRequest, "seller userInfo content is required")
+		return
+	}
+
+	var payload any
+	if err := json.Unmarshal([]byte(request.Content), &payload); err != nil {
+		writeError(w, http.StatusBadRequest, "seller userInfo content is not valid json")
+		return
+	}
+
+	candidates := extractSellerShopCandidates(payload)
+	if len(candidates) == 0 {
+		writeError(w, http.StatusBadRequest, "seller userInfo does not contain shop data")
+		return
+	}
+
+	shops := make([]models.Shop, 0, len(candidates))
+	for _, candidate := range candidates {
+		shop, err := app.store.UpsertShopByExternalCode(r.Context(), store.UpsertShopParams{
+			ShopName:         candidate.ShopName,
+			Platform:         "temu",
+			ExternalCode:     candidate.ExternalCode,
+			EuRepresentative: "",
+			ShopURL:          candidate.ShopURL,
+			Status:           "active",
+			CreatedBy:        user.ID,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to save seller shop")
+			return
+		}
+		if err := app.store.AssignShop(r.Context(), user.ID, shop.ID, "operator"); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to assign seller shop")
+			return
+		}
+		shop.ShopRole = "operator"
+		shops = append(shops, shop)
+	}
+
+	writeJSON(w, http.StatusOK, apiResponse{Data: extensionSellerShopSyncResponse{Shops: shops}})
 }
 
 func (app appServer) handleBatchUpdateProductCollectionMaintenance(w http.ResponseWriter, r *http.Request, _ models.User) {
@@ -1402,6 +1468,75 @@ func parseProductMaintenanceRecord(record string) (store.ProductCollectionMainte
 		CostPriceCent: int(math.Round(cost * 100)),
 		ProductConfig: strings.TrimSpace(configText),
 	}, nil
+}
+
+func extractSellerShopCandidates(payload any) []sellerShopCandidate {
+	candidatesByExternalCode := make(map[string]sellerShopCandidate)
+	collectSellerShopCandidates(payload, candidatesByExternalCode)
+
+	candidates := make([]sellerShopCandidate, 0, len(candidatesByExternalCode))
+	for _, candidate := range candidatesByExternalCode {
+		if candidate.ExternalCode == "" {
+			continue
+		}
+		if candidate.ShopName == "" {
+			candidate.ShopName = "Temu Shop " + candidate.ExternalCode
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
+}
+
+func collectSellerShopCandidates(value any, candidates map[string]sellerShopCandidate) {
+	switch typed := value.(type) {
+	case map[string]any:
+		candidate := sellerShopCandidate{
+			ExternalCode: firstJSONTextByKeys(typed, "mallId", "mallID", "mallid", "mall_id", "mallIdStr", "supplierId", "sellerId", "merchantId"),
+			ShopName:     firstJSONTextByKeys(typed, "mallName", "mall_name", "mallDisplayName", "shopName", "shop_name", "storeName", "store_name", "sellerName", "merchantName", "companyName"),
+			ShopURL:      firstJSONTextByKeys(typed, "shopUrl", "shopURL", "mallUrl", "storeUrl"),
+		}
+		if candidate.ExternalCode != "" {
+			if existing, ok := candidates[candidate.ExternalCode]; ok {
+				candidate.ShopName = firstNonEmptyString(candidate.ShopName, existing.ShopName)
+				candidate.ShopURL = firstNonEmptyString(candidate.ShopURL, existing.ShopURL)
+			}
+			candidates[candidate.ExternalCode] = candidate
+		}
+		for _, child := range typed {
+			collectSellerShopCandidates(child, candidates)
+		}
+	case []any:
+		for _, child := range typed {
+			collectSellerShopCandidates(child, candidates)
+		}
+	}
+}
+
+func firstJSONTextByKeys(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := payload[key]; ok {
+			if text := jsonScalarToString(value); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func jsonScalarToString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		if typed == math.Trunc(typed) {
+			return strconv.FormatInt(int64(typed), 10)
+		}
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	case json.Number:
+		return strings.TrimSpace(typed.String())
+	default:
+		return ""
+	}
 }
 
 func positiveQueryInt(raw string, fallback int, max int) int {

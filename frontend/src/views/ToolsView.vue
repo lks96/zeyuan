@@ -36,6 +36,7 @@ import {
 const defaultPageSize = 10
 const activeToolStorageKey = 'temu-tools-active-tool'
 const recentToolsStorageKey = 'temu-tools-recent-tools'
+const extensionArchivePath = '/downloads/temu-seller-sync-extension.zip'
 
 const route = useRoute()
 const router = useRouter()
@@ -755,6 +756,10 @@ function batchDateToInputValue(batchDate?: string) {
         <va-chip v-if="activeToolCard" size="small" color="success">
           当前工具
         </va-chip>
+        <a class="tool-extension-download" :href="extensionArchivePath" download>
+          <Download :size="18" />
+          下载浏览器插件
+        </a>
         <va-button @click="openToolPicker">
           <Blocks :size="18" />
           切换工具

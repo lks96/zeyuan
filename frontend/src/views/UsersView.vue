@@ -136,6 +136,13 @@ function closeUserModal() {
 }
 
 async function saveUser() {
+  const validationError = validateUserForm()
+  if (validationError) {
+    apiError.value = validationError
+    successMessage.value = ''
+    return
+  }
+
   isSaving.value = true
   apiError.value = ''
   successMessage.value = ''
@@ -162,11 +169,36 @@ async function saveUser() {
 
     closeUserModal()
     users.value = await fetchUsers()
-  } catch {
-    apiError.value = '保存用户失败，请检查表单内容'
+  } catch (error) {
+    apiError.value = apiErrorMessage(error, '保存用户失败，请检查表单内容')
   } finally {
     isSaving.value = false
   }
+}
+
+function validateUserForm() {
+  const username = userForm.value.username.trim()
+  const displayName = userForm.value.displayName.trim()
+  const password = userForm.value.password
+
+  if (!username || !displayName) {
+    return '登录名和显示名称不能为空。'
+  }
+  if (!isEditingUser.value && !password) {
+    return '新增用户时必须填写密码。'
+  }
+  if (password && password.length < 6) {
+    return '密码至少需要 6 位。'
+  }
+  return ''
+}
+
+function apiErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { error?: string } } }).response
+    if (response?.data?.error) return response.data.error
+  }
+  return fallback
 }
 
 async function disableSelectedUser(user: User) {
@@ -424,7 +456,7 @@ async function saveRolePermissions() {
         </label>
         <label class="field-control">
           <span>密码{{ isEditingUser ? '（留空不修改）' : '' }}</span>
-          <input v-model="userForm.password" type="password" :required="!isEditingUser" />
+          <input v-model="userForm.password" type="password" minlength="6" :required="!isEditingUser" />
         </label>
         <label class="field-control">
           <span>角色</span>

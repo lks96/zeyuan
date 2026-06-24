@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Temu Tools 同步</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="topbar">
+        <span class="brand-mark">T</span>
+        <div>
+          <h1>Temu Tools 同步</h1>
+          <p id="subtitle">卖家中心数据自动同步助手</p>
+        </div>
+      </header>
+
+      <section id="loginView" class="login-view">
+        <div class="login-copy">
+          <strong>登录后开始同步</strong>
+          <span>使用系统账号连接工作台，插件会自动使用已配置的服务地址。</span>
+        </div>
+        <div class="field-stack">
+          <label>
+            <span>用户名</span>
+            <input id="username" type="text" autocomplete="username" placeholder="请输入用户名" />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
+          </label>
+        </div>
+        <button id="loginButton" type="button">登录并连接</button>
+      </section>
+
+      <section id="appView" class="app-view" hidden>
+        <section class="connection-strip">
+          <div>
+            <span class="state-dot"></span>
+            <strong>已连接工作台</strong>
+            <small>同步地址由系统下载包自动配置</small>
+          </div>
+          <button id="logoutButton" type="button" class="ghost">退出</button>
+        </section>
+
+        <section class="shop-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">当前店铺</span>
+              <strong>同步数据归属</strong>
+            </div>
+            <button id="fetchShopsButton" type="button" class="secondary compact">刷新</button>
+          </div>
+          <div class="shop-controls">
+            <select id="shopSelect">
+              <option value="">请选择商品导入店铺</option>
+            </select>
+            <button id="syncSellerShopButton" type="button">同步当前卖家店铺</button>
+          </div>
+        </section>
+
+        <section class="task-list" aria-label="同步任务">
+          <article class="task-card">
+            <div class="task-main">
+              <span class="task-badge">P</span>
+              <div>
+                <strong>商品采集</strong>
+                <span>检查 agentseller.temu.com 最新商品，发现新 SKC 后抓全并同步。</span>
+              </div>
+            </div>
+            <div class="task-actions">
+              <label class="switch" title="自动检查商品">
+                <input id="autoProductSync" type="checkbox" />
+                <span></span>
+              </label>
+              <button id="checkLatestProductButton" type="button" class="secondary">立即检查</button>
+            </div>
+          </article>
+
+          <article class="task-card">
+            <div class="task-main">
+              <span class="task-badge task-badge-alt">D</span>
+              <div>
+                <strong>发货提取</strong>
+                <span>检查 seller.kuajingmaihuo.com 最新发货，发现新批次后抓全并同步。</span>
+              </div>
+            </div>
+            <div class="task-actions">
+              <label class="switch" title="自动检查发货">
+                <input id="autoDeliverySync" type="checkbox" />
+                <span></span>
+              </label>
+              <button id="checkLatestDeliveryButton" type="button" class="secondary">立即检查</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="capture-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">最近数据</span>
+              <strong>页面捕获记录</strong>
+            </div>
+            <button id="injectButton" type="button" class="secondary compact">重新注入</button>
+          </div>
+          <div id="captures" class="captures"></div>
+        </section>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script src="config.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
