@@ -354,6 +354,16 @@ export async function exportToolPackageArchive(toolId: string) {
   return { blob: response.data, filename }
 }
 
+export async function exportExtensionArchive(apiBase: string) {
+  const response = await api.get<Blob>('/extension/archive', {
+    params: { apiBase },
+    responseType: 'blob',
+  })
+  const disposition = response.headers['content-disposition'] as string | undefined
+  const filename = filenameFromDisposition(disposition) || 'temu-seller-sync-extension.zip'
+  return { blob: response.data, filename }
+}
+
 function moduleToToolPackage(module: ToolModule): ToolPackage {
   const meta = legacyToolMeta(module)
   const now = new Date().toISOString()

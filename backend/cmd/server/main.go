@@ -300,6 +300,7 @@ func (app appServer) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/tool-packages", app.requirePermission("tools:view", app.handleToolPackages))
 	mux.HandleFunc("GET /api/tool-packages/{id}/export", app.requirePermission("tools:manage", app.handleExportToolPackage))
+	mux.HandleFunc("GET /api/extension/archive", app.requirePermission("tools:view", app.handleExportExtensionArchive))
 	mux.HandleFunc("GET /api/modules", app.requirePermission("tools:view", app.handleModules))
 	mux.HandleFunc("POST /api/modules", app.requirePermission("tools:manage", app.handleUpsertModule))
 	mux.HandleFunc("PUT /api/modules/{id}", app.requirePermission("tools:manage", app.handleUpdateModule))

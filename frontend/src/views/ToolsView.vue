@@ -16,6 +16,7 @@ import {
 } from '@lucide/vue'
 import {
   batchUpdateProductCollectionMaintenance,
+  exportExtensionArchive,
   exportLatestDeliveryExtractBatch,
   exportToolPackageArchive,
   fetchLatestDeliveryExtractBatch,
@@ -36,7 +37,6 @@ import {
 const defaultPageSize = 10
 const activeToolStorageKey = 'temu-tools-active-tool'
 const recentToolsStorageKey = 'temu-tools-recent-tools'
-const extensionArchivePath = '/downloads/temu-seller-sync-extension.zip'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,6 +53,7 @@ const isProductImporting = ref(false)
 const isProductSearching = ref(false)
 const isProductSaving = ref(false)
 const isExporting = ref(false)
+const isExportingExtension = ref(false)
 const exportingToolId = ref('')
 const isSearching = ref(false)
 const apiError = ref('')
@@ -267,6 +268,25 @@ async function exportToolPackage(tool: (typeof toolCards.value)[number]) {
     apiError.value = '导出工具包失败，请确认后端服务已更新并且当前账号有工具管理权限。'
   } finally {
     exportingToolId.value = ''
+  }
+}
+
+async function exportBrowserExtension() {
+  if (isExportingExtension.value) return
+
+  isExportingExtension.value = true
+  apiError.value = ''
+  successMessage.value = ''
+
+  try {
+    const apiBase = `${window.location.origin}/api`
+    const { blob, filename } = await exportExtensionArchive(apiBase)
+    downloadBlob(blob, filename)
+    successMessage.value = '已生成浏览器插件，配置地址已匹配当前系统。'
+  } catch {
+    apiError.value = '下载浏览器插件失败，请确认当前账号有工具查看权限且后端服务在线。'
+  } finally {
+    isExportingExtension.value = false
   }
 }
 
@@ -756,10 +776,10 @@ function batchDateToInputValue(batchDate?: string) {
         <va-chip v-if="activeToolCard" size="small" color="success">
           当前工具
         </va-chip>
-        <a class="tool-extension-download" :href="extensionArchivePath" download>
+        <button class="tool-extension-download" type="button" :disabled="isExportingExtension" @click="exportBrowserExtension">
           <Download :size="18" />
-          下载浏览器插件
-        </a>
+          {{ isExportingExtension ? '生成中' : '下载浏览器插件' }}
+        </button>
         <va-button @click="openToolPicker">
           <Blocks :size="18" />
           切换工具
