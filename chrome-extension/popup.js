@@ -4,6 +4,7 @@ const usernameInput = document.querySelector('#username')
 const passwordInput = document.querySelector('#password')
 const loginButton = document.querySelector('#loginButton')
 const logoutButton = document.querySelector('#logoutButton')
+const apiBaseHint = document.querySelector('#apiBaseHint')
 const fetchShopsButton = document.querySelector('#fetchShopsButton')
 const syncSellerShopButton = document.querySelector('#syncSellerShopButton')
 const injectButton = document.querySelector('#injectButton')
@@ -42,6 +43,7 @@ async function loadState() {
   currentState = response
   autoProductSyncInput.checked = Boolean(response.settings.autoProductSync)
   autoDeliverySyncInput.checked = Boolean(response.settings.autoDeliverySync)
+  apiBaseHint.textContent = apiHostText(response.settings.apiBase)
   renderAuthState()
   renderCaptures(response.latestCaptures || {})
 }
@@ -279,6 +281,15 @@ function sourceText(capture) {
     return url.hostname
   } catch {
     return rawUrl
+  }
+}
+
+function apiHostText(apiBase) {
+  try {
+    const url = new URL(apiBase)
+    return `同步到 ${url.host}`
+  } catch {
+    return '同步地址由系统下载包自动配置'
   }
 }
 

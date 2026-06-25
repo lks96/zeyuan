@@ -63,8 +63,13 @@ async function handleMessage(message, sender) {
 
 async function getState() {
   const data = await chrome.storage.local.get([settingsKey, latestKey, syncKey])
+  const storedSettings = data[settingsKey] || {}
   return {
-    settings: { ...defaultSettings, ...(data[settingsKey] || {}) },
+    settings: {
+      ...defaultSettings,
+      ...storedSettings,
+      apiBase: defaultSettings.apiBase,
+    },
     latestCaptures: data[latestKey] || {},
     lastSync: data[syncKey] || null,
   }
@@ -74,7 +79,7 @@ async function saveSettings(partial) {
   const current = (await getState()).settings
   const next = {
     ...current,
-    apiBase: normalizeApiBase(partial.apiBase ?? current.apiBase),
+    apiBase: defaultSettings.apiBase,
     token: String(partial.token ?? current.token ?? '').trim(),
     shopId: String(partial.shopId ?? current.shopId ?? '').trim(),
     shopName: String(partial.shopName ?? current.shopName ?? '').trim(),
@@ -445,7 +450,7 @@ async function injectActiveTab() {
 
 async function apiRequest(endpoint, options = {}) {
   const settings = (await getState()).settings
-  const apiBase = normalizeApiBase(settings.apiBase)
+  const apiBase = normalizeApiBase(defaultSettings.apiBase)
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -471,7 +476,7 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    const message = payload?.error || payload?.message || `请求失败：HTTP ${response.status}`
+    const message = payload?.error || payload?.message || `请求失败：HTTP ${response.status} (${apiBase}${endpoint})`
     throw new Error(message)
   }
 

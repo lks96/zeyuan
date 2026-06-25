@@ -4,9 +4,21 @@
   "description": "捕获 Temu 卖家中心接口数据，并同步到 temu-tools 商品采集和发货提取接口。",
   "version": "0.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsmvTSeavWiHUMs5Sh185v7uoz29YYoZ2DF66As5hut5pI3/hb2UV/BYw1UrHrJDFbuwmSKpkIQXkrym7xxjU04cfM5RW9gsV0ednTiihvK6PKuj/JZAiGEnqM7GJdQnz22pGXLzubxFph4q6eGIPRwuh9kWLuLUtpMdj6eBmDUo+CeJyvbn82d9K229lmmnCCvHd1kyIEa+zGWsN5018YtJ7q+Bi9OlAtwlFTXCLNL7CeF6cUJVtSZDCdvR7QwpYrJk9RHzmMDlCQultemsM7sDckj0yV12t0l0ZuchcC6EyIv0eHbel9etxYu5MJbjKy6L3Wdht6GqlL789lRT5UwIDAQAB",
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Temu Tools 同步"
+    "default_title": "Temu Tools 同步",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
   },
   "background": {
     "service_worker": "background.js",

@@ -35,29 +35,33 @@ func buildExtensionZip(apiBase string) ([]byte, error) {
 	archive := zip.NewWriter(&buffer)
 
 	sourceDir := filepath.Join(projectRoot(), "chrome-extension")
-	entries, err := os.ReadDir(sourceDir)
-	if err != nil {
-		return nil, err
-	}
+	if err := filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if entry.Name() == ".DS_Store" || entry.Name() == "Thumbs.db" {
+			return nil
+		}
 
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == ".DS_Store" || entry.Name() == "Thumbs.db" {
-			continue
-		}
-		target := entry.Name()
-		if target == "config.js" {
-			if err := addZipFile(archive, target, []byte(extensionConfigJS(apiBase))); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(sourceDir, entry.Name()))
+		relativePath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if err := addZipFile(archive, target, content); err != nil {
-			return nil, err
+		target := filepath.ToSlash(relativePath)
+		if target == "config.js" {
+			return addZipFile(archive, target, []byte(extensionConfigJS(apiBase)))
 		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return addZipFile(archive, target, content)
+	}); err != nil {
+		return nil, err
 	}
 
 	if err := archive.Close(); err != nil {
