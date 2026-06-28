@@ -112,6 +112,7 @@ h1 {
 }
 
 .login-view,
+.locked-view,
 .connection-strip,
 .shop-panel,
 .task-card,
@@ -126,6 +127,50 @@ h1 {
   display: grid;
   gap: 15px;
   padding: 18px;
+}
+
+.locked-view {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 22px 18px 20px;
+  text-align: center;
+}
+
+.lock-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff8a00 0%, #0ea5e9 100%);
+  box-shadow: 0 12px 24px rgba(14, 165, 233, 0.2);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.locked-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.locked-copy strong {
+  color: #111827;
+  font-size: 16px;
+}
+
+.locked-copy span {
+  max-width: 330px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.locked-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 112px));
+  gap: 8px;
 }
 
 .login-copy {

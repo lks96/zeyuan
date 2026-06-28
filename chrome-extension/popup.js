@@ -1,10 +1,13 @@
 const loginView = document.querySelector('#loginView')
 const appView = document.querySelector('#appView')
+const lockedView = document.querySelector('#lockedView')
 const usernameInput = document.querySelector('#username')
 const passwordInput = document.querySelector('#password')
 const loginButton = document.querySelector('#loginButton')
 const logoutButton = document.querySelector('#logoutButton')
 const apiBaseHint = document.querySelector('#apiBaseHint')
+const openProductBackendButton = document.querySelector('#openProductBackendButton')
+const openDeliveryBackendButton = document.querySelector('#openDeliveryBackendButton')
 const fetchShopsButton = document.querySelector('#fetchShopsButton')
 const syncSellerShopButton = document.querySelector('#syncSellerShopButton')
 const injectButton = document.querySelector('#injectButton')
@@ -22,6 +25,8 @@ let shops = []
 document.addEventListener('DOMContentLoaded', init)
 loginButton.addEventListener('click', login)
 logoutButton.addEventListener('click', logout)
+openProductBackendButton.addEventListener('click', () => openBackend('https://agentseller.temu.com/'))
+openDeliveryBackendButton.addEventListener('click', () => openBackend('https://seller.kuajingmaihuo.com/'))
 fetchShopsButton.addEventListener('click', loadShops)
 syncSellerShopButton.addEventListener('click', () => syncSellerShop({ manual: true }))
 injectButton.addEventListener('click', injectActiveTab)
@@ -33,7 +38,7 @@ autoDeliverySyncInput.addEventListener('change', saveSettings)
 
 async function init() {
   await loadState()
-  if (currentState?.settings?.token) {
+  if (currentState?.sellerContext?.allowed && currentState?.settings?.token) {
     await loadShops({ silent: true })
   }
 }
@@ -142,9 +147,15 @@ async function saveSelectedShop() {
 }
 
 function renderAuthState() {
+  const allowed = Boolean(currentState?.sellerContext?.allowed)
   const loggedIn = Boolean(currentState?.settings?.token)
-  loginView.hidden = loggedIn
-  appView.hidden = !loggedIn
+  lockedView.hidden = allowed
+  loginView.hidden = !allowed || loggedIn
+  appView.hidden = !allowed || !loggedIn
+  if (!allowed) {
+    const host = currentState?.sellerContext?.host
+    setStatus(host ? `当前页面 ${host} 不是卖家后台。` : '当前页面不是卖家后台。')
+  }
 }
 
 async function checkLatestProduct() {
@@ -327,6 +338,16 @@ async function clearCapture(kind, button) {
     renderCaptures(response.latestCaptures || {})
     setStatus('已清除缓存。', 'success')
   })
+}
+
+async function openBackend(url) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (tab?.id) {
+    await chrome.tabs.update(tab.id, { url })
+  } else {
+    await chrome.tabs.create({ url })
+  }
+  window.close()
 }
 
 async function sendMessage(message) {

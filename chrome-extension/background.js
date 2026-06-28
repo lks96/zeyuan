@@ -5,6 +5,7 @@ const latestKey = 'latestCaptures'
 const syncKey = 'lastSync'
 const productSnapshotKey = 'productLatestSnapshot'
 const deliverySnapshotKey = 'deliveryLatestSnapshot'
+const sellerBackendHosts = new Set(['agentseller.temu.com', 'seller.kuajingmaihuo.com'])
 
 const packagedConfig = globalThis.TEMU_TOOLS_EXTENSION_CONFIG || {}
 
@@ -33,28 +34,39 @@ async function handleMessage(message, sender) {
       scheduleAutoChecks(sender)
       return { ok: true }
     case 'GET_STATE':
-      return { ok: true, ...(await getState()) }
+      return { ok: true, ...(await getState()), sellerContext: await getActiveTabContext() }
     case 'SAVE_SETTINGS':
+      await assertActiveSellerBackend()
       return { ok: true, settings: await saveSettings(message.settings || {}) }
     case 'LOGIN':
+      await assertActiveSellerBackend()
       return { ok: true, settings: await login(message.credentials || {}) }
     case 'FETCH_SHOPS':
+      await assertActiveSellerBackend()
       return { ok: true, shops: await fetchShops() }
     case 'LOGOUT':
+      await assertActiveSellerBackend()
       return { ok: true, settings: await saveSettings({ token: '', shopId: '', shopName: '' }) }
     case 'SYNC_CAPTURE':
+      await assertActiveSellerBackend()
       return { ok: true, result: await syncCapture(message.kind) }
     case 'FETCH_ALL_CAPTURE':
+      await assertActiveSellerBackend()
       return { ok: true, capture: await fetchAllCapture(message.kind) }
     case 'CHECK_LATEST_PRODUCT':
+      await assertActiveSellerBackend()
       return { ok: true, result: await checkLatestProduct({ manual: true }) }
     case 'CHECK_LATEST_DELIVERY':
+      await assertActiveSellerBackend()
       return { ok: true, result: await checkLatestDelivery({ manual: true }) }
     case 'SYNC_SELLER_SHOP':
+      await assertActiveSellerBackend()
       return { ok: true, result: await syncSellerShop() }
     case 'CLEAR_CAPTURE':
+      await assertActiveSellerBackend()
       return { ok: true, latestCaptures: await clearCapture(message.kind) }
     case 'INJECT_ACTIVE_TAB':
+      await assertActiveSellerBackend()
       return { ok: true, injected: await injectActiveTab() }
     default:
       return { ok: false, error: 'Unknown message type' }
@@ -92,6 +104,7 @@ async function saveSettings(partial) {
 
 function scheduleAutoChecks(sender) {
   const tabId = sender.tab?.id || 0
+  if (!isSellerBackendUrl(sender.tab?.url)) return
   if (!tabId) return
   setTimeout(() => {
     checkLatestProduct({ tabId, frameId: sender.frameId || 0, manual: false }).catch(() => {})
@@ -441,6 +454,9 @@ async function deliveryTabTarget(options, state) {
 async function injectActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (!tab?.id) throw new Error('没有可注入的当前标签页')
+  if (!isSellerBackendUrl(tab.url)) {
+    throw new Error('请先打开 Temu 卖家后台页面')
+  }
   await chrome.scripting.executeScript({
     target: { tabId: tab.id, allFrames: true },
     files: ['content-script.js'],
@@ -486,6 +502,40 @@ async function apiRequest(endpoint, options = {}) {
 function normalizeApiBase(value) {
   const apiBase = String(value || defaultSettings.apiBase).trim()
   return apiBase.replace(/\/+$/, '')
+}
+
+async function getActiveTabContext() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  const url = tab?.url || ''
+  const host = hostFromUrl(url)
+  return {
+    allowed: sellerBackendHosts.has(host),
+    host,
+    url,
+    tabId: tab?.id || 0,
+    isProductBackend: host === 'agentseller.temu.com',
+    isDeliveryBackend: host === 'seller.kuajingmaihuo.com',
+  }
+}
+
+async function assertActiveSellerBackend() {
+  const context = await getActiveTabContext()
+  if (!context.allowed) {
+    throw new Error('请先打开 Temu 卖家后台页面后再使用插件')
+  }
+  return context
+}
+
+function isSellerBackendUrl(value) {
+  return sellerBackendHosts.has(hostFromUrl(value))
+}
+
+function hostFromUrl(value) {
+  try {
+    return new URL(value || '').hostname
+  } catch {
+    return ''
+  }
 }
 
 function compactTimestamp(value) {
