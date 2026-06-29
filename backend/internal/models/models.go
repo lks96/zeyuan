@@ -231,16 +231,20 @@ type SalesInventorySummary struct {
 }
 
 type SalesTopProduct struct {
-	ProductSkcID             string `json:"productSkcId"`
-	ProductName              string `json:"productName"`
-	ProductImage             string `json:"productImage"`
-	SupplierID               string `json:"supplierId"`
-	SupplierName             string `json:"supplierName"`
-	LastThirtyDaysSaleVolume int    `json:"lastThirtyDaysSaleVolume"`
-	LastSevenDaysSaleVolume  int    `json:"lastSevenDaysSaleVolume"`
-	TodaySaleVolume          int    `json:"todaySaleVolume"`
-	SalesAmountCent          int64  `json:"salesAmount"`
-	GrossProfitCent          int64  `json:"grossProfit"`
+	ProductSkcID                     string `json:"productSkcId"`
+	ProductName                      string `json:"productName"`
+	ProductImage                     string `json:"productImage"`
+	SupplierID                       string `json:"supplierId"`
+	SupplierName                     string `json:"supplierName"`
+	LastThirtyDaysSaleVolume         int    `json:"lastThirtyDaysSaleVolume"`
+	LastSevenDaysSaleVolume          int    `json:"lastSevenDaysSaleVolume"`
+	TodaySaleVolume                  int    `json:"todaySaleVolume"`
+	WarehouseInventoryNum            int    `json:"warehouseInventoryNum"`
+	WaitReceiveNum                   int    `json:"waitReceiveNum"`
+	UnavailableWarehouseInventoryNum int    `json:"unavailableWarehouseInventoryNum"`
+	LackQuantity                     int    `json:"lackQuantity"`
+	SalesAmountCent                  int64  `json:"salesAmount"`
+	GrossProfitCent                  int64  `json:"grossProfit"`
 }
 
 type SalesFieldMapping struct {

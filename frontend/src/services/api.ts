@@ -273,6 +273,10 @@ export interface SalesTopProduct {
   lastThirtyDaysSaleVolume: number
   lastSevenDaysSaleVolume: number
   todaySaleVolume: number
+  warehouseInventoryNum: number
+  waitReceiveNum: number
+  unavailableWarehouseInventoryNum: number
+  lackQuantity: number
   salesAmount: number
   grossProfit: number
 }

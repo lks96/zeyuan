@@ -1597,6 +1597,10 @@ SELECT
   COALESCE(SUM(r.last_thirty_days_sale_volume), 0),
   COALESCE(SUM(r.last_seven_days_sale_volume), 0),
   COALESCE(SUM(r.today_sale_volume), 0),
+  COALESCE(SUM(r.warehouse_inventory_num), 0),
+  COALESCE(SUM(r.wait_receive_num), 0),
+  COALESCE(SUM(r.unavailable_warehouse_inventory_num), 0),
+  COALESCE(SUM(r.lack_quantity), 0),
   COALESCE(SUM(r.last_thirty_days_sale_volume * r.supplier_price_cent), 0),
   COALESCE(SUM(r.last_thirty_days_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0)
 FROM sales_overall_rows r
@@ -1621,6 +1625,10 @@ LIMIT 8`
 			&product.LastThirtyDaysSaleVolume,
 			&product.LastSevenDaysSaleVolume,
 			&product.TodaySaleVolume,
+			&product.WarehouseInventoryNum,
+			&product.WaitReceiveNum,
+			&product.UnavailableWarehouseInventoryNum,
+			&product.LackQuantity,
 			&product.SalesAmountCent,
 			&product.GrossProfitCent,
 		); err != nil {

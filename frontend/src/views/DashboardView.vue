@@ -283,9 +283,14 @@ function apiErrorMessage(error: unknown) {
             <img :src="cachedImageUrl(product.productImage)" alt="" />
             <span>
               <strong>{{ product.productName }}</strong>
-              <small>SKC {{ product.productSkcId }} · 30日销量 {{ product.lastThirtyDaysSaleVolume }}</small>
+              <small>
+                SKC {{ product.productSkcId }} · 30日销量 {{ product.lastThirtyDaysSaleVolume }} · 仓内 {{ product.warehouseInventoryNum }}
+              </small>
             </span>
-            <em>{{ formatMoney(product.salesAmount) }}</em>
+            <span class="top-product-side">
+              <em>{{ formatMoney(product.salesAmount) }}</em>
+              <small>待发 {{ product.waitReceiveNum }} · 缺货 {{ product.lackQuantity }}</small>
+            </span>
           </button>
         </div>
         <div v-else class="empty-state compact-empty">导入销售 JSON 后显示商品排行</div>
