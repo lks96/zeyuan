@@ -928,6 +928,26 @@ select {
   line-height: 1.4;
 }
 
+.product-price-cell {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(68px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.product-price-cell .product-profit {
+  margin-top: 0;
+  color: #15803d;
+  font-weight: 700;
+  text-align: right;
+}
+
+.product-price-cell .profit-negative,
+.product-price-cell .profit-missing {
+  color: #dc2626;
+}
+
 .product-image-cell {
   display: grid;
   width: 64px;

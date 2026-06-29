@@ -16,6 +16,7 @@ import {
 } from '@lucide/vue'
 import {
   batchUpdateProductCollectionMaintenance,
+  cachedImageUrl,
   exportExtensionArchive,
   exportLatestDeliveryExtractBatch,
   exportProductCollectionProducts,
@@ -716,7 +717,7 @@ function closeEditProduct() {
 }
 
 function openImagePreview(url: string, title = '') {
-  previewImageUrl.value = url
+  previewImageUrl.value = cachedImageUrl(url)
   previewImageTitle.value = title
 }
 
@@ -751,6 +752,17 @@ async function saveEditingProduct() {
 
 function centsToYuan(value?: number) {
   return ((value ?? 0) / 100).toFixed(2)
+}
+
+function productProfitCents(product: ProductCollectionProduct) {
+  if ((product.costPrice ?? 0) <= 0) return null
+  return (product.supplierPrice ?? 0) - product.costPrice
+}
+
+function productProfitLabel(product: ProductCollectionProduct) {
+  const profitCents = productProfitCents(product)
+  if (profitCents === null) return '成本未维护'
+  return `利润 ¥${centsToYuan(profitCents)}`
 }
 
 function centsToYuanInput(value?: number) {
@@ -1054,7 +1066,7 @@ function batchDateToInputValue(batchDate?: string) {
             aria-label="预览商品图片"
             @click="openImagePreview(product.mainImageUrl, product.productName)"
           >
-            <img :src="product.mainImageUrl" alt="" />
+            <img :src="cachedImageUrl(product.mainImageUrl)" alt="" />
           </button>
           <span v-else>-</span>
         </span>
@@ -1066,9 +1078,20 @@ function batchDateToInputValue(batchDate?: string) {
           {{ product.numberOfPiecesNew || 0 }}P
           <small>{{ product.productConfig || '未维护配置' }}</small>
         </span>
-        <span>
-          ¥{{ centsToYuan(product.supplierPrice) }}
-          <small>成本 ¥{{ centsToYuan(product.costPrice) }}</small>
+        <span class="product-price-cell">
+          <span>
+            ¥{{ centsToYuan(product.supplierPrice) }}
+            <small>成本 ¥{{ centsToYuan(product.costPrice) }}</small>
+          </span>
+          <small
+            class="product-profit"
+            :class="{
+              'profit-missing': productProfitCents(product) === null,
+              'profit-negative': (productProfitCents(product) ?? 0) < 0,
+            }"
+          >
+            {{ productProfitLabel(product) }}
+          </small>
         </span>
         <span>{{ productStatusLabel(product.skcTopStatus) }}</span>
         <span>{{ formatDateTime(product.createdAt) }}</span>
@@ -1208,7 +1231,7 @@ function batchDateToInputValue(batchDate?: string) {
             aria-label="预览商品图片"
             @click="openImagePreview(row.productSkcPicture, row.productName)"
           >
-            <img :src="row.productSkcPicture" alt="" />
+            <img :src="cachedImageUrl(row.productSkcPicture)" alt="" />
           </button>
           <strong>{{ row.productName }}</strong>
         </span>
@@ -1315,7 +1338,7 @@ function batchDateToInputValue(batchDate?: string) {
       </div>
 
       <div class="edit-product-summary">
-        <img v-if="editingProduct.mainImageUrl" :src="editingProduct.mainImageUrl" alt="" />
+        <img v-if="editingProduct.mainImageUrl" :src="cachedImageUrl(editingProduct.mainImageUrl)" alt="" />
         <div>
           <strong>{{ editingProduct.productName }}</strong>
           <span>SKC {{ editingProduct.productSkcId }}</span>

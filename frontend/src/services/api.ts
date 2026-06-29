@@ -476,6 +476,7 @@ export async function exportProductCollectionProducts(params: ProductCollectionQ
   const response = await api.get<Blob>('/tools/product-collection/products/export', {
     params: cleanQueryParams(params),
     responseType: 'blob',
+    timeout: 120000,
   })
   const disposition = response.headers['content-disposition'] as string | undefined
   const filename = filenameFromDisposition(disposition) || 'product-collection.xlsx'
@@ -509,6 +510,11 @@ function cleanQueryParams(params: object) {
       return true
     }),
   )
+}
+
+export function cachedImageUrl(url?: string) {
+  if (!url) return ''
+  return `/api/image-cache?url=${encodeURIComponent(url)}`
 }
 
 function filenameFromDisposition(disposition?: string) {

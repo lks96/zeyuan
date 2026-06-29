@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +19,8 @@ const (
 	productExportImageTimeout     = 12 * time.Second
 	productExportImageConcurrency = 16
 )
+
+var productConfigPiecePattern = regexp.MustCompile(`(?i)(\d+)\s*p`)
 
 type productExportImageAnchor struct {
 	RowIndex int
@@ -195,7 +198,7 @@ func productCollectionWorksheetXML(products []models.ProductCollectionProduct, a
 			builder.WriteString(inlineStringCell(cellRef(1, excelRow), 3, product.MainImageURL))
 		}
 		builder.WriteString(inlineStringCell(cellRef(2, excelRow), 3, product.ProductSkcID))
-		builder.WriteString(inlineStringCell(cellRef(3, excelRow), 3, productPiecesText(product.NumberOfPiecesNew)))
+		builder.WriteString(inlineStringCell(cellRef(3, excelRow), 3, productPiecesText(product.NumberOfPiecesNew, product.ProductConfig)))
 		builder.WriteString(inlineStringCell(cellRef(4, excelRow), 4, product.ProductConfig))
 		builder.WriteString(inlineStringCell(cellRef(5, excelRow), 3, centsText(product.SupplierPriceCent)))
 		builder.WriteString(inlineStringCell(cellRef(6, excelRow), 3, centsText(product.CostPriceCent)))
@@ -293,11 +296,40 @@ func productCollectionCorePropertiesXML() string {
 		`</cp:coreProperties>`
 }
 
-func productPiecesText(pieces int) string {
-	if pieces <= 0 {
-		return ""
+func productPiecesText(pieces int, config string) string {
+	if pieces > 0 {
+		return fmt.Sprintf("%dP", pieces)
 	}
-	return fmt.Sprintf("%dP", pieces)
+
+	calculatedPieces := productConfigPieces(config)
+	if calculatedPieces > 0 {
+		return fmt.Sprintf("%dP", calculatedPieces)
+	}
+
+	return "0P"
+}
+
+func productConfigPieces(config string) int {
+	total := 0
+	matches := productConfigPiecePattern.FindAllStringSubmatchIndex(config, -1)
+	for _, match := range matches {
+		if len(match) < 4 || productConfigPieceMatchContinuesWord(config, match[1]) {
+			continue
+		}
+		var pieces int
+		if _, err := fmt.Sscanf(config[match[2]:match[3]], "%d", &pieces); err == nil {
+			total += pieces
+		}
+	}
+	return total
+}
+
+func productConfigPieceMatchContinuesWord(config string, endIndex int) bool {
+	if endIndex >= len(config) {
+		return false
+	}
+	next := config[endIndex]
+	return (next >= '0' && next <= '9') || (next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z')
 }
 
 func centsText(cents int) string {

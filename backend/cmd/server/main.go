@@ -160,6 +160,7 @@ type batchUpdateProductCollectionMaintenanceRequest struct {
 type deliveryExtractSourceItem struct {
 	DeliveryOrderSn       string                       `json:"deliveryOrderSn"`
 	ExpressBatchSn        string                       `json:"expressBatchSn"`
+	PlatExpressStatusTip  string                       `json:"platExpressStatusTip"`
 	SupplierID            int64                        `json:"supplierId"`
 	ProductSkcID          int64                        `json:"productSkcId"`
 	DeliverSkcNum         int                          `json:"deliverSkcNum"`
@@ -301,6 +302,7 @@ func (app appServer) routes() http.Handler {
 	mux.HandleFunc("GET /api/tool-packages", app.requirePermission("tools:view", app.handleToolPackages))
 	mux.HandleFunc("GET /api/tool-packages/{id}/export", app.requirePermission("tools:manage", app.handleExportToolPackage))
 	mux.HandleFunc("GET /api/extension/archive", app.requirePermission("tools:view", app.handleExportExtensionArchive))
+	mux.HandleFunc("GET /api/image-cache", app.handleCachedImage)
 	mux.HandleFunc("GET /api/modules", app.requirePermission("tools:view", app.handleModules))
 	mux.HandleFunc("POST /api/modules", app.requirePermission("tools:manage", app.handleUpsertModule))
 	mux.HandleFunc("PUT /api/modules/{id}", app.requirePermission("tools:manage", app.handleUpdateModule))
@@ -685,6 +687,33 @@ func (app appServer) handleProductCollectionProducts(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, apiResponse{Data: products})
+}
+
+func (app appServer) handleCachedImage(w http.ResponseWriter, r *http.Request) {
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		writeError(w, http.StatusBadRequest, "image url is required")
+		return
+	}
+
+	imageURL, err := normalizeImageURL(rawURL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid image url")
+		return
+	}
+
+	content, mediaType, _, err := downloadCachedExportImage(r.Context(), imageURL, 15*time.Second)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to load image")
+		return
+	}
+
+	w.Header().Set("Content-Type", mediaType)
+	w.Header().Set("Cache-Control", "public, max-age=604800")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(content); err != nil {
+		log.Printf("failed to write cached image: %v", err)
+	}
 }
 
 func (app appServer) handleExportProductCollectionProducts(w http.ResponseWriter, r *http.Request, _ models.User) {
@@ -1807,6 +1836,9 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 	batchDate := ""
 
 	for _, item := range items {
+		if !isPendingCourierPickup(item) {
+			continue
+		}
 		if batchDate == "" {
 			batchDate = deliveryDateFromOrderSn(item.DeliveryOrderSn)
 		}
@@ -1856,6 +1888,10 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 	return rows, batchDate
 }
 
+func isPendingCourierPickup(item deliveryExtractSourceItem) bool {
+	return strings.TrimSpace(item.PlatExpressStatusTip) == "待快递揽收"
+}
+
 func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSourceItem {
 	flattened := make([]deliveryExtractSourceItem, 0, len(items))
 	for _, item := range items {
@@ -1867,6 +1903,7 @@ func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSo
 		for _, child := range item.DeliveryOrderList {
 			child.ExpressBatchSn = firstNonEmptyString(child.ExpressBatchSn, item.ExpressBatchSn)
 			child.DeliveryOrderSn = firstNonEmptyString(child.DeliveryOrderSn, item.DeliveryOrderSn)
+			child.PlatExpressStatusTip = firstNonEmptyString(child.PlatExpressStatusTip, item.PlatExpressStatusTip)
 			child.SupplierID = firstPositiveInt64(child.SupplierID, item.SupplierID)
 			if strings.TrimSpace(child.ReceiveAddressInfo.ReceiverName) == "" {
 				child.ReceiveAddressInfo = item.ReceiveAddressInfo
