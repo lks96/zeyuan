@@ -1,12 +1,19 @@
 # Database Migrations
 
-This directory is the source of truth for schema initialization and database upgrades.
+This directory keeps the incremental database upgrade history.
+
+For a brand-new production database, use the current full schema script instead:
+
+- `backend/scripts/zeyuan_db_full_schema.sql`
+
+The full schema script should contain the final table definitions in one pass. These migration files are still kept so existing databases can upgrade safely from their current version.
 
 ## Rules
 
 - Use numbered files: `001_init.sql`, `002_permissions.sql`, `003_feature_name.sql`.
 - After a migration has been applied to any shared environment, do not edit it.
 - Add a new migration for every schema or seed-data change.
+- When adding a migration, also update `backend/scripts/zeyuan_db_full_schema.sql` so new databases can be created directly with the latest structure.
 - Keep migrations idempotent when possible with `IF NOT EXISTS`, `ON DUPLICATE KEY UPDATE`, or `INSERT IGNORE`.
 - Do not store real secrets in SQL files.
 

@@ -38,8 +38,8 @@ echo "Downloading backend dependencies..."
 (cd "$BACKEND" && go mod download)
 
 if [ "$ENV_READY" = "1" ] && [ "$SKIP_MIGRATE" != "1" ]; then
-  echo "Running database migrations..."
-  (cd "$BACKEND" && go run ./cmd/migrate)
+  echo "Preparing database schema..."
+  (cd "$BACKEND" && go run ./cmd/dbprepare)
 fi
 
 if [ "$ENV_READY" != "1" ]; then

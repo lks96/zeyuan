@@ -25,7 +25,7 @@ Temu Tools 是一个网页版运营工具台，后端使用 Go，前端使用 Vu
 - `shops`
 - `user_shops`
 
-建表和初始化数据通过版本化迁移维护，目录在 [migrations](C:/Users/admin/Documents/temu-tools/backend/migrations/README.md)。
+建表脚本分两层维护：新库使用完整建库脚本，旧库使用版本化迁移补丁。迁移目录在 [migrations](C:/Users/admin/Documents/temu-tools/backend/migrations/README.md)，完整建库脚本在 [zeyuan_db_full_schema.sql](C:/Users/admin/Documents/temu-tools/backend/scripts/zeyuan_db_full_schema.sql)。
 
 ## 数据库配置
 
@@ -38,13 +38,19 @@ cp .env.example .env
 
 然后把 `.env` 里的 `DB_PASSWORD` 改成实际密码。你提供的 MySQL 可访问库名是 `runtu_trade`；这个业务是典型关系型数据，多用户、店铺授权、订单/商品后续也都适合 MySQL。后面如果需要本地开发隔离，可以再补一个 Docker MySQL。
 
-执行初始化和升级 SQL：
+执行数据库准备：
 
 ```bash
-go run ./cmd/migrate
+go run ./cmd/dbprepare
 ```
 
-迁移器会维护 `schema_migrations` 表，记录已执行文件的版本号和 checksum。已经执行过的 SQL 文件不要直接修改，后续改表、补字段、补初始化权限都新增 `003_xxx.sql` 这类文件。
+`dbprepare` 会自动判断当前数据库状态：如果库不存在或是空库，就执行完整建库脚本；如果库内已有表，就执行迁移补丁。迁移器会维护 `schema_migrations` 表，记录已执行文件的版本号和 checksum。已经执行过的 SQL 文件不要直接修改，后续改表、补字段、补初始化权限都新增 `003_xxx.sql` 这类文件。
+
+全新库初始化管理员账号时，需要在 `.env` 或系统环境变量中设置：
+
+```bash
+ADMIN_INITIAL_PASSWORD=change_this_admin_password
+```
 
 如果以后换成有建库权限的账号，迁移命令会自动创建配置中的数据库。手动创建 SQL 如下：
 

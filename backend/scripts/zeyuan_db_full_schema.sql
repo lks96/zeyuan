@@ -1,12 +1,14 @@
--- 生产库初始化脚本
+-- 当前完整建库脚本
 -- 数据库：zeyuan_db
 -- 用法示例：
 --   mysql -h <host> -P <port> -u <user> -p < backend/scripts/init_zeyuan_db.sql
 --
 -- 说明：
--- 1. 本脚本是“最终结构版”初始化脚本，不放在 migrations 目录，避免被迁移器误执行。
--- 2. 脚本会写入 schema_migrations 记录，后续仍可继续使用 Go 迁移器执行新增迁移。
--- 3. 初始店铺只保留当前店铺：Kunsong Grocery / 634418227150594。
+-- 1. 新生产库或全新环境优先执行本脚本，建表语句会直接创建当前最终结构。
+-- 2. migrations 目录仍然保留历史增量脚本，给已有数据库升级使用。
+-- 3. 每次新增迁移后，也需要同步维护本脚本。
+-- 4. 脚本会写入 schema_migrations 记录，后续仍可继续使用 Go 迁移器执行新增迁移。
+-- 5. 初始店铺只保留当前店铺：Kunsong Grocery / 634418227150594。
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;

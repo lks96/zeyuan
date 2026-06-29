@@ -244,6 +244,68 @@ export interface TenantSummary {
   adminCanViewAll: boolean
 }
 
+export interface SalesDashboardPeriodMetric {
+  key: string
+  label: string
+  salesVolume: number
+  salesAmount: number
+  grossProfit: number
+}
+
+export interface SalesInventorySummary {
+  lackQuantity: number
+  adviceQuantity: number
+  warehouseInventoryNum: number
+  expectedOccupiedInventoryNum: number
+  unavailableWarehouseInventoryNum: number
+  waitDeliveryInventoryNum: number
+  waitReceiveNum: number
+  waitApproveInventoryNum: number
+  sellerWarehouseStock: number
+}
+
+export interface SalesTopProduct {
+  productSkcId: string
+  productName: string
+  productImage: string
+  supplierId: string
+  supplierName: string
+  lastThirtyDaysSaleVolume: number
+  lastSevenDaysSaleVolume: number
+  todaySaleVolume: number
+  salesAmount: number
+  grossProfit: number
+}
+
+export interface SalesOverallBatch {
+  id: number
+  sourceName: string
+  supplierId: string
+  supplierName: string
+  sourceTotal: number
+  importedTotal: number
+  createdAt: string
+}
+
+export interface SalesFieldMapping {
+  label: string
+  path: string
+  note: string
+}
+
+export interface SalesDashboard {
+  latestBatch?: SalesOverallBatch
+  periods: SalesDashboardPeriodMetric[]
+  inventory: SalesInventorySummary
+  topProducts: SalesTopProduct[]
+  fieldMapping: SalesFieldMapping[]
+}
+
+export interface SalesOverallImportResult {
+  batch: SalesOverallBatch
+  dashboard: SalesDashboard
+}
+
 export const api = axios.create({
   baseURL: '/api',
   timeout: 8000,
@@ -534,6 +596,19 @@ function filenameFromDisposition(disposition?: string) {
 
 export async function fetchTenantSummary() {
   const response = await api.get<ApiEnvelope<TenantSummary>>('/tenant/summary')
+  return response.data.data
+}
+
+export async function fetchSalesDashboard() {
+  const response = await api.get<ApiEnvelope<SalesDashboard>>('/dashboard/sales-overall')
+  return response.data.data
+}
+
+export async function importSalesOverallJson(sourceName: string, content: string) {
+  const response = await api.post<ApiEnvelope<SalesOverallImportResult>>('/dashboard/sales-overall/import-json', {
+    sourceName,
+    content,
+  })
   return response.data.data
 }
 

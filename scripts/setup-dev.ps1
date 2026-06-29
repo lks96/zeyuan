@@ -82,8 +82,8 @@ Push-Location $Backend
 try {
   go mod download
   if ($envReady -and -not $SkipMigrate) {
-    Write-Host "Running database migrations..."
-    go run ./cmd/migrate
+    Write-Host "Preparing database schema..."
+    go run ./cmd/dbprepare
   }
 } finally {
   Pop-Location

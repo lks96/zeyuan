@@ -73,10 +73,10 @@ if (-not $SkipInstall -and -not (Test-Path (Join-Path $Frontend "node_modules"))
 }
 
 if (-not $SkipMigrate) {
-  Write-Host "Running database migrations..."
+  Write-Host "Preparing database schema..."
   Push-Location $Backend
   try {
-    go run ./cmd/migrate
+    go run ./cmd/dbprepare
   } finally {
     Pop-Location
   }

@@ -158,6 +158,110 @@ type ProductCollectionBatchUpdateResult struct {
 	Products     ProductCollectionList `json:"products"`
 }
 
+type SalesOverallRow struct {
+	ID                               int64     `json:"id,omitempty"`
+	BatchID                          int64     `json:"batchId,omitempty"`
+	SupplierID                       string    `json:"supplierId"`
+	SupplierName                     string    `json:"supplierName"`
+	ProductSkcID                     string    `json:"productSkcId"`
+	ProductSkuID                     string    `json:"productSkuId"`
+	ProductName                      string    `json:"productName"`
+	ProductImage                     string    `json:"productImage"`
+	Category                         string    `json:"category"`
+	SkuClassName                     string    `json:"skuClassName"`
+	SupplierPriceCent                int       `json:"supplierPrice"`
+	CostPriceCent                    int       `json:"costPrice"`
+	PriceReviewStatus                int       `json:"priceReviewStatus"`
+	IsVerifyPrice                    bool      `json:"isVerifyPrice"`
+	LackQuantity                     int       `json:"lackQuantity"`
+	InCartNumber7d                   int       `json:"inCartNumber7d"`
+	InCartNumberTotal                int       `json:"inCartNumberTotal"`
+	SubscribeArrivalRemindCount      int       `json:"subscribeArrivalRemindCount"`
+	TodaySaleVolume                  int       `json:"todaySaleVolume"`
+	LastSevenDaysSaleVolume          int       `json:"lastSevenDaysSaleVolume"`
+	LastThirtyDaysSaleVolume         int       `json:"lastThirtyDaysSaleVolume"`
+	TotalSaleVolume                  int       `json:"totalSaleVolume"`
+	WarehouseInventoryNum            int       `json:"warehouseInventoryNum"`
+	ExpectedOccupiedInventoryNum     int       `json:"expectedOccupiedInventoryNum"`
+	UnavailableWarehouseInventoryNum int       `json:"unavailableWarehouseInventoryNum"`
+	WaitDeliveryInventoryNum         int       `json:"waitDeliveryInventoryNum"`
+	WaitReceiveNum                   int       `json:"waitReceiveNum"`
+	WaitApproveInventoryNum          int       `json:"waitApproveInventoryNum"`
+	SellerWarehouseStock             int       `json:"sellerWarehouseStock"`
+	AdviceQuantity                   int       `json:"adviceQuantity"`
+	AvailableSaleDays                *float64  `json:"availableSaleDays,omitempty"`
+	WarehouseAvailableSaleDays       *float64  `json:"warehouseAvailableSaleDays,omitempty"`
+	PurchaseConfig                   string    `json:"purchaseConfig"`
+	TargetProduceDays                *float64  `json:"targetProduceDays,omitempty"`
+	TargetProduceNum                 *int      `json:"targetProduceNum,omitempty"`
+	AdviceProduceNum                 *int      `json:"adviceProduceNum,omitempty"`
+	ShowStockGuide                   bool      `json:"showStockGuide"`
+	RawJSON                          string    `json:"-"`
+	CreatedAt                        time.Time `json:"createdAt,omitempty"`
+}
+
+type SalesOverallBatch struct {
+	ID            int64     `json:"id"`
+	SourceName    string    `json:"sourceName"`
+	SupplierID    string    `json:"supplierId"`
+	SupplierName  string    `json:"supplierName"`
+	SourceTotal   int       `json:"sourceTotal"`
+	ImportedTotal int       `json:"importedTotal"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type SalesDashboardPeriodMetric struct {
+	Key             string `json:"key"`
+	Label           string `json:"label"`
+	SalesVolume     int    `json:"salesVolume"`
+	SalesAmountCent int64  `json:"salesAmount"`
+	GrossProfitCent int64  `json:"grossProfit"`
+}
+
+type SalesInventorySummary struct {
+	LackQuantity                     int `json:"lackQuantity"`
+	AdviceQuantity                   int `json:"adviceQuantity"`
+	WarehouseInventoryNum            int `json:"warehouseInventoryNum"`
+	ExpectedOccupiedInventoryNum     int `json:"expectedOccupiedInventoryNum"`
+	UnavailableWarehouseInventoryNum int `json:"unavailableWarehouseInventoryNum"`
+	WaitDeliveryInventoryNum         int `json:"waitDeliveryInventoryNum"`
+	WaitReceiveNum                   int `json:"waitReceiveNum"`
+	WaitApproveInventoryNum          int `json:"waitApproveInventoryNum"`
+	SellerWarehouseStock             int `json:"sellerWarehouseStock"`
+}
+
+type SalesTopProduct struct {
+	ProductSkcID             string `json:"productSkcId"`
+	ProductName              string `json:"productName"`
+	ProductImage             string `json:"productImage"`
+	SupplierID               string `json:"supplierId"`
+	SupplierName             string `json:"supplierName"`
+	LastThirtyDaysSaleVolume int    `json:"lastThirtyDaysSaleVolume"`
+	LastSevenDaysSaleVolume  int    `json:"lastSevenDaysSaleVolume"`
+	TodaySaleVolume          int    `json:"todaySaleVolume"`
+	SalesAmountCent          int64  `json:"salesAmount"`
+	GrossProfitCent          int64  `json:"grossProfit"`
+}
+
+type SalesFieldMapping struct {
+	Label string `json:"label"`
+	Path  string `json:"path"`
+	Note  string `json:"note"`
+}
+
+type SalesDashboard struct {
+	LatestBatch  *SalesOverallBatch           `json:"latestBatch,omitempty"`
+	Periods      []SalesDashboardPeriodMetric `json:"periods"`
+	Inventory    SalesInventorySummary        `json:"inventory"`
+	TopProducts  []SalesTopProduct            `json:"topProducts"`
+	FieldMapping []SalesFieldMapping          `json:"fieldMapping"`
+}
+
+type SalesOverallImportResult struct {
+	Batch     SalesOverallBatch `json:"batch"`
+	Dashboard SalesDashboard    `json:"dashboard"`
+}
+
 type SystemSetting struct {
 	Key         string    `json:"key"`
 	Value       string    `json:"value"`

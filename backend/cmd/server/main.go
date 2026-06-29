@@ -154,6 +154,11 @@ type batchUpdateProductCollectionMaintenanceRequest struct {
 	Content string `json:"content"`
 }
 
+type salesOverallImportRequest struct {
+	SourceName string `json:"sourceName"`
+	Content    string `json:"content"`
+}
+
 type deliveryExtractSourceItem struct {
 	DeliveryOrderSn       string                       `json:"deliveryOrderSn"`
 	ExpressBatchSn        string                       `json:"expressBatchSn"`
@@ -188,6 +193,87 @@ type deliveryExtractPackage struct {
 type deliveryExtractPackageItem struct {
 	ProductSkuID int64 `json:"productSkuId"`
 	SkuNum       int   `json:"skuNum"`
+}
+
+type salesOverallSource struct {
+	Items []salesOverallProduct
+	Total int
+}
+
+type salesOverallSourceEnvelope struct {
+	List         []json.RawMessage        `json:"list"`
+	Data         []json.RawMessage        `json:"data"`
+	SubOrderList []json.RawMessage        `json:"subOrderList"`
+	Result       salesOverallSourceResult `json:"result"`
+	Total        int                      `json:"total"`
+}
+
+type salesOverallSourceResult struct {
+	SubOrderList []json.RawMessage `json:"subOrderList"`
+	List         []json.RawMessage `json:"list"`
+	Data         []json.RawMessage `json:"data"`
+	Total        int               `json:"total"`
+}
+
+type salesOverallProduct struct {
+	ProductName           string                 `json:"productName"`
+	Category              string                 `json:"category"`
+	ProductSkcID          int64                  `json:"productSkcId"`
+	ProductSkcPicture     string                 `json:"productSkcPicture"`
+	SupplierID            int64                  `json:"supplierId"`
+	SupplierName          string                 `json:"supplierName"`
+	SkuQuantityDetailList []salesOverallSku      `json:"skuQuantityDetailList"`
+	SkuQuantityTotalInfo  salesOverallSkuSummary `json:"skuQuantityTotalInfo"`
+	Raw                   json.RawMessage        `json:"-"`
+}
+
+type salesOverallSku struct {
+	ProductSkuID                   int64                        `json:"productSkuId"`
+	ClassName                      string                       `json:"className"`
+	CurrencyType                   string                       `json:"currencyType"`
+	SupplierPrice                  int                          `json:"supplierPrice"`
+	IsVerifyPrice                  bool                         `json:"isVerifyPrice"`
+	PriceReviewStatus              int                          `json:"priceReviewStatus"`
+	LackQuantity                   *int                         `json:"lackQuantity"`
+	InCardNumber                   int                          `json:"inCardNumber"`
+	NoMessageSubscribeArrivalCount int                          `json:"nomsgSubsCntCntSth"`
+	InCartNumber7d                 int                          `json:"inCartNumber7d"`
+	IsSubscribeArrivalRemind       bool                         `json:"isSubscribeArrivalRemind"`
+	TodaySaleVolume                int                          `json:"todaySaleVolume"`
+	LastSevenDaysSaleVolume        int                          `json:"lastSevenDaysSaleVolume"`
+	LastThirtyDaysSaleVolume       int                          `json:"lastThirtyDaysSaleVolume"`
+	TotalSaleVolume                int                          `json:"totalSaleVolume"`
+	InventoryNumInfo               salesOverallInventoryNumInfo `json:"inventoryNumInfo"`
+	WarehouseAvailableSaleDays     *float64                     `json:"warehouseAvailableSaleDays"`
+	AvailableSaleDays              *float64                     `json:"availableSaleDays"`
+	AvailableSaleDaysFromInventory *float64                     `json:"availableSaleDaysFromInventory"`
+	PurchaseConfig                 string                       `json:"purchaseConfig"`
+	SellerWarehouseStock           int                          `json:"sellerWhStock"`
+	TargetProduceDays              *float64                     `json:"targetProduceDays"`
+	TargetProduceNum               *int                         `json:"targetProduceNum"`
+	AdviceProduceNum               *int                         `json:"adviceProduceNum"`
+	AdviceQuantity                 *int                         `json:"adviceQuantity"`
+	PredictSaleAdviceQuantity      *int                         `json:"predictSaleAdviceQuantity"`
+	ShowStockGuide                 bool                         `json:"showStockGuide"`
+	Raw                            json.RawMessage              `json:"-"`
+}
+
+type salesOverallSkuSummary struct {
+	LackQuantity             int `json:"lackQuantity"`
+	AdviceQuantity           int `json:"adviceQuantity"`
+	TodaySaleVolume          int `json:"todaySaleVolume"`
+	LastSevenDaysSaleVolume  int `json:"lastSevenDaysSaleVolume"`
+	LastThirtyDaysSaleVolume int `json:"lastThirtyDaysSaleVolume"`
+	TotalSaleVolume          int `json:"totalSaleVolume"`
+}
+
+type salesOverallInventoryNumInfo struct {
+	WarehouseInventoryNum            int `json:"warehouseInventoryNum"`
+	ExpectedOccupiedInventoryNum     int `json:"expectedOccupiedInventoryNum"`
+	UnavailableWarehouseInventoryNum int `json:"unavailableWarehouseInventoryNum"`
+	WaitDeliveryInventoryNum         int `json:"waitDeliveryInventoryNum"`
+	WaitReceiveNum                   int `json:"waitReceiveNum"`
+	WaitApproveInventoryNum          int `json:"waitApproveInventoryNum"`
 }
 
 type productCollectionSource struct {
@@ -304,6 +390,8 @@ func (app appServer) routes() http.Handler {
 	mux.HandleFunc("POST /api/modules", app.requirePermission("tools:manage", app.handleUpsertModule))
 	mux.HandleFunc("PUT /api/modules/{id}", app.requirePermission("tools:manage", app.handleUpdateModule))
 	mux.HandleFunc("DELETE /api/modules/{id}", app.requirePermission("tools:manage", app.handleDeleteModule))
+	mux.HandleFunc("GET /api/dashboard/sales-overall", app.requirePermission("dashboard:view", app.handleSalesOverallDashboard))
+	mux.HandleFunc("POST /api/dashboard/sales-overall/import-json", app.requirePermission("tools:manage", app.handleImportSalesOverallJSON))
 	mux.HandleFunc("GET /api/tools/delivery-extractions", app.requirePermission("tools:view", app.handleDeliveryExtractBatches))
 	mux.HandleFunc("GET /api/tools/delivery-extractions/latest/export", app.requirePermission("tools:view", app.handleExportLatestDeliveryExtractBatch))
 	mux.HandleFunc("GET /api/tools/delivery-extractions/latest", app.requirePermission("tools:view", app.handleLatestDeliveryExtractBatch))
@@ -422,6 +510,61 @@ func (app appServer) handleToolPackages(w http.ResponseWriter, r *http.Request, 
 	}
 
 	writeJSON(w, http.StatusOK, apiResponse{Data: packages})
+}
+
+func (app appServer) handleSalesOverallDashboard(w http.ResponseWriter, r *http.Request, user models.User) {
+	dashboard, err := app.store.SalesDashboard(r.Context(), user)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load sales dashboard")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, apiResponse{Data: dashboard})
+}
+
+func (app appServer) handleImportSalesOverallJSON(w http.ResponseWriter, r *http.Request, user models.User) {
+	var request salesOverallImportRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	request.SourceName = strings.TrimSpace(request.SourceName)
+	if request.SourceName == "" {
+		request.SourceName = "listOverall.json"
+	}
+	if strings.TrimSpace(request.Content) == "" {
+		writeError(w, http.StatusBadRequest, "json content is required")
+		return
+	}
+
+	var source salesOverallSource
+	if err := decodeSalesOverallSource([]byte(request.Content), &source); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	rows := extractSalesOverallRows(source.Items)
+	if len(rows) == 0 {
+		writeError(w, http.StatusBadRequest, "no sales rows found")
+		return
+	}
+
+	supplierID := rows[0].SupplierID
+	supplierName := rows[0].SupplierName
+	result, err := app.store.SaveSalesOverall(r.Context(), store.SaveSalesOverallParams{
+		SourceName:   request.SourceName,
+		SourceTotal:  source.Total,
+		SupplierID:   supplierID,
+		SupplierName: supplierName,
+		Rows:         rows,
+		CreatedBy:    user.ID,
+	}, user)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save sales dashboard data")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, apiResponse{Data: result})
 }
 
 func (app appServer) handleUpsertModule(w http.ResponseWriter, r *http.Request, _ models.User) {
@@ -1820,6 +1963,58 @@ func decodeProductCollectionRawList(rawList []json.RawMessage, total int, source
 	return nil
 }
 
+func decodeSalesOverallSource(content []byte, source *salesOverallSource) error {
+	var rawList []json.RawMessage
+	if err := json.Unmarshal(content, &rawList); err == nil && len(rawList) > 0 {
+		return decodeSalesOverallRawList(rawList, len(rawList), source)
+	}
+
+	var envelope salesOverallSourceEnvelope
+	if err := json.Unmarshal(content, &envelope); err != nil {
+		return err
+	}
+
+	rawList = envelope.SubOrderList
+	total := envelope.Total
+	if len(rawList) == 0 {
+		rawList = envelope.List
+	}
+	if len(rawList) == 0 {
+		rawList = envelope.Data
+	}
+	if len(rawList) == 0 {
+		rawList = envelope.Result.SubOrderList
+		total = envelope.Result.Total
+	}
+	if len(rawList) == 0 {
+		rawList = envelope.Result.List
+	}
+	if len(rawList) == 0 {
+		rawList = envelope.Result.Data
+	}
+	if len(rawList) == 0 {
+		return errors.New("no subOrderList found")
+	}
+	return decodeSalesOverallRawList(rawList, total, source)
+}
+
+func decodeSalesOverallRawList(rawList []json.RawMessage, total int, source *salesOverallSource) error {
+	source.Items = make([]salesOverallProduct, 0, len(rawList))
+	source.Total = total
+	for _, raw := range rawList {
+		var item salesOverallProduct
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return err
+		}
+		item.Raw = raw
+		source.Items = append(source.Items, item)
+	}
+	if source.Total == 0 {
+		source.Total = len(source.Items)
+	}
+	return nil
+}
+
 func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryExtractRow, string) {
 	items = flattenDeliveryItems(items)
 	rows := make([]models.DeliveryExtractRow, 0, len(items))
@@ -1904,6 +2099,72 @@ func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSo
 	return flattened
 }
 
+func extractSalesOverallRows(items []salesOverallProduct) []models.SalesOverallRow {
+	rows := make([]models.SalesOverallRow, 0, len(items))
+	for _, item := range items {
+		if item.ProductSkcID == 0 {
+			continue
+		}
+		for _, sku := range item.SkuQuantityDetailList {
+			if sku.ProductSkuID == 0 {
+				continue
+			}
+			rowRaw, _ := json.Marshal(struct {
+				Product salesOverallProduct `json:"product"`
+				SKU     salesOverallSku     `json:"sku"`
+			}{Product: item, SKU: sku})
+			lackQuantity := item.SkuQuantityTotalInfo.LackQuantity
+			if sku.LackQuantity != nil {
+				lackQuantity = *sku.LackQuantity
+			}
+			adviceQuantity := firstPositiveInt(item.SkuQuantityTotalInfo.AdviceQuantity, optionalIntValue(sku.AdviceQuantity), optionalIntValue(sku.PredictSaleAdviceQuantity))
+			subscribeCount := sku.NoMessageSubscribeArrivalCount
+			if subscribeCount == 0 && sku.IsSubscribeArrivalRemind {
+				subscribeCount = 1
+			}
+
+			rows = append(rows, models.SalesOverallRow{
+				SupplierID:                       int64ToString(item.SupplierID),
+				SupplierName:                     strings.TrimSpace(item.SupplierName),
+				ProductSkcID:                     int64ToString(item.ProductSkcID),
+				ProductSkuID:                     int64ToString(sku.ProductSkuID),
+				ProductName:                      strings.TrimSpace(item.ProductName),
+				ProductImage:                     strings.TrimSpace(item.ProductSkcPicture),
+				Category:                         strings.TrimSpace(item.Category),
+				SkuClassName:                     strings.TrimSpace(sku.ClassName),
+				SupplierPriceCent:                sku.SupplierPrice,
+				PriceReviewStatus:                sku.PriceReviewStatus,
+				IsVerifyPrice:                    sku.IsVerifyPrice,
+				LackQuantity:                     lackQuantity,
+				InCartNumber7d:                   sku.InCartNumber7d,
+				InCartNumberTotal:                sku.InCardNumber,
+				SubscribeArrivalRemindCount:      subscribeCount,
+				TodaySaleVolume:                  sku.TodaySaleVolume,
+				LastSevenDaysSaleVolume:          sku.LastSevenDaysSaleVolume,
+				LastThirtyDaysSaleVolume:         sku.LastThirtyDaysSaleVolume,
+				TotalSaleVolume:                  sku.TotalSaleVolume,
+				WarehouseInventoryNum:            sku.InventoryNumInfo.WarehouseInventoryNum,
+				ExpectedOccupiedInventoryNum:     sku.InventoryNumInfo.ExpectedOccupiedInventoryNum,
+				UnavailableWarehouseInventoryNum: sku.InventoryNumInfo.UnavailableWarehouseInventoryNum,
+				WaitDeliveryInventoryNum:         sku.InventoryNumInfo.WaitDeliveryInventoryNum,
+				WaitReceiveNum:                   sku.InventoryNumInfo.WaitReceiveNum,
+				WaitApproveInventoryNum:          sku.InventoryNumInfo.WaitApproveInventoryNum,
+				SellerWarehouseStock:             sku.SellerWarehouseStock,
+				AdviceQuantity:                   adviceQuantity,
+				AvailableSaleDays:                firstFloatPointer(sku.AvailableSaleDays, sku.AvailableSaleDaysFromInventory),
+				WarehouseAvailableSaleDays:       sku.WarehouseAvailableSaleDays,
+				PurchaseConfig:                   strings.TrimSpace(sku.PurchaseConfig),
+				TargetProduceDays:                sku.TargetProduceDays,
+				TargetProduceNum:                 sku.TargetProduceNum,
+				AdviceProduceNum:                 sku.AdviceProduceNum,
+				ShowStockGuide:                   sku.ShowStockGuide,
+				RawJSON:                          string(rowRaw),
+			})
+		}
+	}
+	return rows
+}
+
 func extractProductCollectionProducts(entries []productCollectionSourceEntry, shop models.Shop) []models.ProductCollectionProduct {
 	products := make([]models.ProductCollectionProduct, 0, len(entries))
 	for _, entry := range entries {
@@ -1982,6 +2243,22 @@ func firstPositiveInt64(values ...int64) int64 {
 		}
 	}
 	return 0
+}
+
+func optionalIntValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func firstFloatPointer(values ...*float64) *float64 {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func firstNonEmptyString(values ...string) string {

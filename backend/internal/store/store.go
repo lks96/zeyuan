@@ -112,6 +112,15 @@ type BatchUpdateProductCollectionMaintenanceParams struct {
 	Items []ProductCollectionMaintenanceItem
 }
 
+type SaveSalesOverallParams struct {
+	SourceName   string
+	SourceTotal  int
+	SupplierID   string
+	SupplierName string
+	Rows         []models.SalesOverallRow
+	CreatedBy    int64
+}
+
 const (
 	defaultPageSize = 10
 	maxPageSize     = 100
@@ -1322,6 +1331,307 @@ WHERE product_skc_id = ?`
 	}, nil
 }
 
+func (s *Store) SaveSalesOverall(ctx context.Context, params SaveSalesOverallParams, user models.User) (models.SalesOverallImportResult, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+	defer tx.Rollback()
+
+	const batchQuery = `
+INSERT INTO sales_overall_batches (source_name, supplier_id, supplier_name, source_total, imported_total, created_by)
+VALUES (?, ?, ?, ?, ?, ?)`
+	result, err := tx.ExecContext(
+		ctx,
+		batchQuery,
+		params.SourceName,
+		params.SupplierID,
+		params.SupplierName,
+		params.SourceTotal,
+		len(params.Rows),
+		params.CreatedBy,
+	)
+	if err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+
+	batchID, err := result.LastInsertId()
+	if err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+
+	const rowQuery = `
+INSERT INTO sales_overall_rows (
+  batch_id,
+  supplier_id,
+  supplier_name,
+  product_skc_id,
+  product_sku_id,
+  product_name,
+  product_image,
+  category,
+  sku_class_name,
+  supplier_price_cent,
+  cost_price_cent,
+  price_review_status,
+  is_verify_price,
+  lack_quantity,
+  in_cart_number_7d,
+  in_cart_number_total,
+  subscribe_arrival_remind_count,
+  today_sale_volume,
+  last_seven_days_sale_volume,
+  last_thirty_days_sale_volume,
+  total_sale_volume,
+  warehouse_inventory_num,
+  expected_occupied_inventory_num,
+  unavailable_warehouse_inventory_num,
+  wait_delivery_inventory_num,
+  wait_receive_num,
+  wait_approve_inventory_num,
+  seller_warehouse_stock,
+  advice_quantity,
+  available_sale_days,
+  warehouse_available_sale_days,
+  purchase_config,
+  target_produce_days,
+  target_produce_num,
+  advice_produce_num,
+  show_stock_guide,
+  row_json
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	imported := 0
+	for _, row := range params.Rows {
+		if row.ProductSkcID == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(
+			ctx,
+			rowQuery,
+			batchID,
+			row.SupplierID,
+			row.SupplierName,
+			row.ProductSkcID,
+			row.ProductSkuID,
+			row.ProductName,
+			row.ProductImage,
+			row.Category,
+			row.SkuClassName,
+			row.SupplierPriceCent,
+			row.CostPriceCent,
+			row.PriceReviewStatus,
+			row.IsVerifyPrice,
+			row.LackQuantity,
+			row.InCartNumber7d,
+			row.InCartNumberTotal,
+			row.SubscribeArrivalRemindCount,
+			row.TodaySaleVolume,
+			row.LastSevenDaysSaleVolume,
+			row.LastThirtyDaysSaleVolume,
+			row.TotalSaleVolume,
+			row.WarehouseInventoryNum,
+			row.ExpectedOccupiedInventoryNum,
+			row.UnavailableWarehouseInventoryNum,
+			row.WaitDeliveryInventoryNum,
+			row.WaitReceiveNum,
+			row.WaitApproveInventoryNum,
+			row.SellerWarehouseStock,
+			row.AdviceQuantity,
+			nullableFloat(row.AvailableSaleDays),
+			nullableFloat(row.WarehouseAvailableSaleDays),
+			row.PurchaseConfig,
+			nullableFloat(row.TargetProduceDays),
+			nullableInt(row.TargetProduceNum),
+			nullableInt(row.AdviceProduceNum),
+			row.ShowStockGuide,
+			row.RawJSON,
+		); err != nil {
+			return models.SalesOverallImportResult{}, err
+		}
+		imported++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+
+	batch, err := s.GetSalesOverallBatch(ctx, batchID)
+	if err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+
+	dashboard, err := s.SalesDashboard(ctx, user)
+	if err != nil {
+		return models.SalesOverallImportResult{}, err
+	}
+	dashboard.LatestBatch = &batch
+
+	return models.SalesOverallImportResult{
+		Batch:     batch,
+		Dashboard: dashboard,
+	}, nil
+}
+
+func (s *Store) GetSalesOverallBatch(ctx context.Context, id int64) (models.SalesOverallBatch, error) {
+	const query = `
+SELECT id, source_name, supplier_id, supplier_name, source_total, imported_total, created_at
+FROM sales_overall_batches
+WHERE id = ?`
+
+	var batch models.SalesOverallBatch
+	if err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&batch.ID,
+		&batch.SourceName,
+		&batch.SupplierID,
+		&batch.SupplierName,
+		&batch.SourceTotal,
+		&batch.ImportedTotal,
+		&batch.CreatedAt,
+	); errors.Is(err, sql.ErrNoRows) {
+		return models.SalesOverallBatch{}, ErrNotFound
+	} else if err != nil {
+		return models.SalesOverallBatch{}, err
+	}
+	return batch, nil
+}
+
+func (s *Store) SalesDashboard(ctx context.Context, user models.User) (models.SalesDashboard, error) {
+	dashboard := models.SalesDashboard{
+		Periods: []models.SalesDashboardPeriodMetric{
+			{Key: "today", Label: "今日"},
+			{Key: "sevenDays", Label: "7日"},
+			{Key: "thirtyDays", Label: "30日"},
+		},
+		TopProducts:  make([]models.SalesTopProduct, 0),
+		FieldMapping: salesOverallFieldMapping(),
+	}
+
+	batchID, err := s.latestVisibleSalesOverallBatchID(ctx, user)
+	if errors.Is(err, ErrNotFound) {
+		return dashboard, nil
+	}
+	if err != nil {
+		return models.SalesDashboard{}, err
+	}
+
+	batch, err := s.GetSalesOverallBatch(ctx, batchID)
+	if err != nil {
+		return models.SalesDashboard{}, err
+	}
+	dashboard.LatestBatch = &batch
+
+	whereClause, args := salesOverallVisibleRowsClause(user, batchID)
+	const costExpr = "IF(COALESCE(p.cost_price_cent, 0) > 0, p.cost_price_cent, r.cost_price_cent)"
+
+	periodQuery := `
+SELECT
+  COALESCE(SUM(r.today_sale_volume), 0),
+  COALESCE(SUM(r.today_sale_volume * r.supplier_price_cent), 0),
+  COALESCE(SUM(r.today_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0),
+  COALESCE(SUM(r.last_seven_days_sale_volume), 0),
+  COALESCE(SUM(r.last_seven_days_sale_volume * r.supplier_price_cent), 0),
+  COALESCE(SUM(r.last_seven_days_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0),
+  COALESCE(SUM(r.last_thirty_days_sale_volume), 0),
+  COALESCE(SUM(r.last_thirty_days_sale_volume * r.supplier_price_cent), 0),
+  COALESCE(SUM(r.last_thirty_days_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0)
+FROM sales_overall_rows r
+LEFT JOIN product_collection_products p ON p.product_skc_id = r.product_skc_id
+` + whereClause
+	var todayVolume, sevenVolume, thirtyVolume int
+	var todayAmount, todayProfit, sevenAmount, sevenProfit, thirtyAmount, thirtyProfit int64
+	if err := s.db.QueryRowContext(ctx, periodQuery, args...).Scan(
+		&todayVolume,
+		&todayAmount,
+		&todayProfit,
+		&sevenVolume,
+		&sevenAmount,
+		&sevenProfit,
+		&thirtyVolume,
+		&thirtyAmount,
+		&thirtyProfit,
+	); err != nil {
+		return models.SalesDashboard{}, err
+	}
+	dashboard.Periods = []models.SalesDashboardPeriodMetric{
+		{Key: "today", Label: "今日", SalesVolume: todayVolume, SalesAmountCent: todayAmount, GrossProfitCent: todayProfit},
+		{Key: "sevenDays", Label: "7日", SalesVolume: sevenVolume, SalesAmountCent: sevenAmount, GrossProfitCent: sevenProfit},
+		{Key: "thirtyDays", Label: "30日", SalesVolume: thirtyVolume, SalesAmountCent: thirtyAmount, GrossProfitCent: thirtyProfit},
+	}
+
+	inventoryQuery := `
+SELECT
+  COALESCE(SUM(r.lack_quantity), 0),
+  COALESCE(SUM(r.advice_quantity), 0),
+  COALESCE(SUM(r.warehouse_inventory_num), 0),
+  COALESCE(SUM(r.expected_occupied_inventory_num), 0),
+  COALESCE(SUM(r.unavailable_warehouse_inventory_num), 0),
+  COALESCE(SUM(r.wait_delivery_inventory_num), 0),
+  COALESCE(SUM(r.wait_receive_num), 0),
+  COALESCE(SUM(r.wait_approve_inventory_num), 0),
+  COALESCE(SUM(r.seller_warehouse_stock), 0)
+FROM sales_overall_rows r
+` + whereClause
+	if err := s.db.QueryRowContext(ctx, inventoryQuery, args...).Scan(
+		&dashboard.Inventory.LackQuantity,
+		&dashboard.Inventory.AdviceQuantity,
+		&dashboard.Inventory.WarehouseInventoryNum,
+		&dashboard.Inventory.ExpectedOccupiedInventoryNum,
+		&dashboard.Inventory.UnavailableWarehouseInventoryNum,
+		&dashboard.Inventory.WaitDeliveryInventoryNum,
+		&dashboard.Inventory.WaitReceiveNum,
+		&dashboard.Inventory.WaitApproveInventoryNum,
+		&dashboard.Inventory.SellerWarehouseStock,
+	); err != nil {
+		return models.SalesDashboard{}, err
+	}
+
+	topQuery := `
+SELECT
+  r.product_skc_id,
+  MAX(r.product_name),
+  MAX(r.product_image),
+  MAX(r.supplier_id),
+  MAX(r.supplier_name),
+  COALESCE(SUM(r.last_thirty_days_sale_volume), 0),
+  COALESCE(SUM(r.last_seven_days_sale_volume), 0),
+  COALESCE(SUM(r.today_sale_volume), 0),
+  COALESCE(SUM(r.last_thirty_days_sale_volume * r.supplier_price_cent), 0),
+  COALESCE(SUM(r.last_thirty_days_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0)
+FROM sales_overall_rows r
+LEFT JOIN product_collection_products p ON p.product_skc_id = r.product_skc_id
+` + whereClause + `
+GROUP BY r.product_skc_id
+ORDER BY COALESCE(SUM(r.last_thirty_days_sale_volume), 0) DESC, COALESCE(SUM(r.last_seven_days_sale_volume), 0) DESC, r.product_skc_id ASC
+LIMIT 8`
+	rows, err := s.db.QueryContext(ctx, topQuery, args...)
+	if err != nil {
+		return models.SalesDashboard{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var product models.SalesTopProduct
+		if err := rows.Scan(
+			&product.ProductSkcID,
+			&product.ProductName,
+			&product.ProductImage,
+			&product.SupplierID,
+			&product.SupplierName,
+			&product.LastThirtyDaysSaleVolume,
+			&product.LastSevenDaysSaleVolume,
+			&product.TodaySaleVolume,
+			&product.SalesAmountCent,
+			&product.GrossProfitCent,
+		); err != nil {
+			return models.SalesDashboard{}, err
+		}
+		dashboard.TopProducts = append(dashboard.TopProducts, product)
+	}
+
+	return dashboard, rows.Err()
+}
+
 func (s *Store) GetProductCollectionProduct(ctx context.Context, id int64) (models.ProductCollectionProduct, error) {
 	const query = `
 SELECT
@@ -1599,6 +1909,90 @@ func temuMallURL(externalCode string) string {
 		return ""
 	}
 	return "https://www.temu.com/mall.html?mall_id=" + externalCode
+}
+
+func (s *Store) latestVisibleSalesOverallBatchID(ctx context.Context, user models.User) (int64, error) {
+	query := `
+SELECT b.id
+FROM sales_overall_batches b`
+	args := make([]any, 0)
+	if !user.IsAdmin() {
+		query += `
+WHERE EXISTS (
+  SELECT 1
+  FROM sales_overall_rows r
+  INNER JOIN shops sh ON sh.platform = 'temu' AND sh.external_code = r.supplier_id
+  INNER JOIN user_shops us ON us.shop_id = sh.id AND us.user_id = ?
+  WHERE r.batch_id = b.id
+)`
+		args = append(args, user.ID)
+	}
+	query += `
+ORDER BY b.created_at DESC, b.id DESC
+LIMIT 1`
+
+	var id int64
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&id); errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	} else if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func salesOverallVisibleRowsClause(user models.User, batchID int64) (string, []any) {
+	args := []any{batchID}
+	if user.IsAdmin() {
+		return "WHERE r.batch_id = ?", args
+	}
+
+	args = append(args, user.ID)
+	return `
+INNER JOIN shops sh ON sh.platform = 'temu' AND sh.external_code = r.supplier_id
+INNER JOIN user_shops us ON us.shop_id = sh.id AND us.user_id = ?
+WHERE r.batch_id = ?`, []any{user.ID, batchID}
+}
+
+func nullableFloat(value *float64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func salesOverallFieldMapping() []models.SalesFieldMapping {
+	return []models.SalesFieldMapping{
+		{Label: "商品信息", Path: "subOrderList[].productName / category / productSkcId / productSkcPicture", Note: "商品名称、类目、SKC、主图"},
+		{Label: "SKU信息", Path: "subOrderList[].skuQuantityDetailList[].productSkuId / className / skuExtCode", Note: "SKU编码、规格名和外部编码"},
+		{Label: "申报价格(CNY)", Path: "skuQuantityDetailList[].supplierPrice", Note: "接口单位是分，页面按元展示"},
+		{Label: "开款价格状态", Path: "skuQuantityDetailList[].isVerifyPrice / priceReviewStatus / isReducePricePass", Note: "价格校验、审核状态和降价通过状态"},
+		{Label: "缺货数量", Path: "skuQuantityDetailList[].lackQuantity", Note: "SKU维度缺货数量"},
+		{Label: "近7日用户加购数量", Path: "skuQuantityDetailList[].inCartNumber7d", Note: "近7日加购"},
+		{Label: "用户累计加购数量", Path: "skuQuantityDetailList[].inCardNumber", Note: "累计加购"},
+		{Label: "已订阅待提醒到货", Path: "skuQuantityDetailList[].nomsgSubsCntCntSth / isSubscribeArrivalRemind", Note: "优先取订阅数量，布尔值只作为是否支持提醒"},
+		{Label: "销售数据-今日", Path: "skuQuantityDetailList[].todaySaleVolume", Note: "销售额=销量*申报价格"},
+		{Label: "销售数据-近7天", Path: "skuQuantityDetailList[].lastSevenDaysSaleVolume", Note: "销售额=销量*申报价格"},
+		{Label: "销售数据-近30天", Path: "skuQuantityDetailList[].lastThirtyDaysSaleVolume", Note: "销售额=销量*申报价格"},
+		{Label: "仓内可用库存", Path: "inventoryNumInfo.warehouseInventoryNum", Note: "特定仓可用库存"},
+		{Label: "仓内预占用库存", Path: "inventoryNumInfo.expectedOccupiedInventoryNum", Note: "特定仓预占库存"},
+		{Label: "仓内暂不可用库存", Path: "inventoryNumInfo.unavailableWarehouseInventoryNum", Note: "特定仓不可用库存"},
+		{Label: "已发货库存", Path: "inventoryNumInfo.waitDeliveryInventoryNum", Note: "已发货未入库相关库存"},
+		{Label: "已创建备货单待发货库存", Path: "inventoryNumInfo.waitReceiveNum", Note: "接口样例中该字段有数值"},
+		{Label: "待审核备货库存", Path: "inventoryNumInfo.waitApproveInventoryNum", Note: "待审核备货量"},
+		{Label: "仓内实物库存", Path: "skuQuantityDetailList[].sellerWhStock", Note: "卖家仓库存"},
+		{Label: "备货逻辑", Path: "skuQuantityDetailList[].purchaseConfig", Note: "例如 4 + 3"},
+		{Label: "建议备货量", Path: "skuQuantityDetailList[].adviceQuantity / skuQuantityTotalInfo.adviceQuantity", Note: "优先取SKU值，缺失时可用汇总值"},
+		{Label: "库存可售天数", Path: "skuQuantityDetailList[].availableSaleDays", Note: "可售天数"},
+		{Label: "仓内库存可售天数", Path: "skuQuantityDetailList[].warehouseAvailableSaleDays", Note: "仓内可售天数"},
+		{Label: "建议备货引导", Path: "skuQuantityDetailList[].showStockGuide", Note: "是否展示引导"},
+	}
 }
 
 func (s *Store) count(ctx context.Context, table string) (int, error) {

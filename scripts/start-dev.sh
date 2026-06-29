@@ -159,8 +159,8 @@ if [ "$SKIP_INSTALL" != "1" ] && [ ! -d "$FRONTEND/node_modules" ]; then
 fi
 
 if [ "$SKIP_MIGRATE" != "1" ]; then
-  echo "Running database migrations..."
-  (cd "$BACKEND" && go run ./cmd/migrate)
+  echo "Preparing database schema..."
+  (cd "$BACKEND" && go run ./cmd/dbprepare)
 fi
 
 if is_running "$BACKEND_PID_FILE" || is_running "$FRONTEND_PID_FILE"; then
