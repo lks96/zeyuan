@@ -218,7 +218,6 @@ CREATE TABLE IF NOT EXISTS product_collection_products (
   skc_top_status INT NOT NULL DEFAULT 0 COMMENT '商品状态',
   product_created_at DATETIME NULL COMMENT '商品创建时间',
   supplier_id VARCHAR(64) NOT NULL DEFAULT '' COMMENT '店铺编码',
-  shop_id BIGINT UNSIGNED NULL COMMENT '关联店铺ID',
   source_json LONGTEXT NOT NULL COMMENT '原始商品JSON',
   created_by BIGINT UNSIGNED NULL COMMENT '导入人用户ID',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '导入时间',
@@ -226,12 +225,9 @@ CREATE TABLE IF NOT EXISTS product_collection_products (
   PRIMARY KEY (id),
   UNIQUE KEY uk_product_collection_products_skc (product_skc_id),
   KEY idx_product_collection_products_sku (product_sku_id),
-  KEY idx_product_collection_products_shop_id (shop_id),
   KEY idx_product_collection_products_supplier_id (supplier_id),
   KEY idx_product_collection_products_status (skc_top_status),
   KEY idx_product_collection_products_created_at (product_created_at),
-  CONSTRAINT fk_product_collection_products_shop_id FOREIGN KEY (shop_id) REFERENCES shops(id)
-    ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_product_collection_products_created_by FOREIGN KEY (created_by) REFERENCES users(id)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品采集表';
@@ -420,7 +416,8 @@ VALUES
   ('011', '011_add_schema_comments.sql', '6f342343b4ddf34060439592e15c91949f4ec71866f545370f16efdfa4092674'),
   ('012', '012_product_collection.sql', 'd7243c493d715f6e99bff20c62c9d3b84dfce0fec016d32baa6c75fef09d6112'),
   ('013', '013_delivery_extract_express_batch.sql', '0291043eb5b65c079bb2a1f534af29dc116bcb62069698ebfea3977bbace9b9b'),
-  ('014', '014_tool_packages.sql', '4e6c8b2dcb8c202beda1a36d21560eb4d0e0bf698fe02cdae073f3a678e312c0')
+  ('014', '014_tool_packages.sql', '4e6c8b2dcb8c202beda1a36d21560eb4d0e0bf698fe02cdae073f3a678e312c0'),
+  ('015', '015_product_collection_supplier_shop_link.sql', 'ba4dc6ab62f7bcc6a37985329c0c67d8afd34719b2fbea362be95ad23ec370c9')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   checksum = VALUES(checksum);

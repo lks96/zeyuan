@@ -107,6 +107,7 @@ func toolPackageExportFiles(toolID string) []toolPackageExportFile {
 		return append([]toolPackageExportFile{
 			{Source: "tools/builtin/product-research/manifest.json", Target: "source/manifest.json"},
 			{Source: "backend/migrations/012_product_collection.sql", Target: "migrations/012_product_collection.sql"},
+			{Source: "backend/migrations/015_product_collection_supplier_shop_link.sql", Target: "migrations/015_product_collection_supplier_shop_link.sql"},
 			{Source: "backend/cmd/server/export_xlsx.go", Target: "backend/cmd/server/export_xlsx.go"},
 			{Source: "backend/cmd/server/export_image_cache.go", Target: "backend/cmd/server/export_image_cache.go"},
 			{Source: "backend/cmd/server/product_export_xlsx.go", Target: "backend/cmd/server/product_export_xlsx.go"},

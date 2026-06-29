@@ -31,7 +31,8 @@
       "product_collection_products"
     ],
     "installMigrations": [
-      "backend/migrations/012_product_collection.sql"
+      "backend/migrations/012_product_collection.sql",
+      "backend/migrations/015_product_collection_supplier_shop_link.sql"
     ]
   }
 }

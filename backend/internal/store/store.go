@@ -1008,7 +1008,7 @@ SELECT
   r.created_at
 FROM delivery_extract_rows r
 LEFT JOIN shops s ON s.id = r.shop_id OR (r.shop_id IS NULL AND s.platform = 'temu' AND s.external_code = r.supplier_id)
-LEFT JOIN product_collection_products pc ON pc.product_skc_id = r.skc
+LEFT JOIN product_collection_products pc ON pc.product_skc_id = r.skc AND pc.supplier_id = r.supplier_id
 ` + rowWhereClause + `
 ORDER BY r.id ASC`
 	rowArgs := args
@@ -1081,11 +1081,10 @@ INSERT INTO product_collection_products (
   skc_top_status,
   product_created_at,
   supplier_id,
-  shop_id,
   source_json,
   created_by
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   product_sku_id = VALUES(product_sku_id),
   main_image_url = VALUES(main_image_url),
@@ -1095,7 +1094,6 @@ ON DUPLICATE KEY UPDATE
   skc_top_status = VALUES(skc_top_status),
   product_created_at = VALUES(product_created_at),
   supplier_id = VALUES(supplier_id),
-  shop_id = VALUES(shop_id),
   source_json = VALUES(source_json),
   created_by = VALUES(created_by)`
 
@@ -1120,7 +1118,6 @@ ON DUPLICATE KEY UPDATE
 			product.SkcTopStatus,
 			productCreatedAt,
 			params.Shop.ExternalCode,
-			params.Shop.ID,
 			product.RawJSON,
 			params.CreatedBy,
 		); err != nil {
@@ -1164,7 +1161,7 @@ func (s *Store) ListProductCollectionProducts(ctx context.Context, options Produ
 		args = append(args, keyword, keyword, keyword, keyword, keyword, keyword)
 	}
 	if options.ShopID > 0 {
-		whereClause += " AND p.shop_id = ?"
+		whereClause += " AND s.id = ?"
 		args = append(args, options.ShopID)
 	}
 	if options.HasStatus {
@@ -1182,7 +1179,7 @@ func (s *Store) ListProductCollectionProducts(ctx context.Context, options Produ
 	countQuery := `
 SELECT COUNT(*)
 FROM product_collection_products p
-LEFT JOIN shops s ON s.id = p.shop_id
+LEFT JOIN shops s ON s.platform = 'temu' AND s.external_code = p.supplier_id
 ` + whereClause
 	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&list.RowsTotal); err != nil {
 		return models.ProductCollectionList{}, err
@@ -1205,12 +1202,12 @@ SELECT
   p.skc_top_status,
   p.product_created_at,
   p.supplier_id,
-  p.shop_id,
+  s.id,
   COALESCE(s.shop_name, ''),
   p.created_at,
   p.updated_at
 FROM product_collection_products p
-LEFT JOIN shops s ON s.id = p.shop_id
+LEFT JOIN shops s ON s.platform = 'temu' AND s.external_code = p.supplier_id
 ` + whereClause + `
 ORDER BY p.product_created_at IS NULL ASC, p.product_created_at DESC, p.id DESC`
 	rowArgs := args
@@ -1341,12 +1338,12 @@ SELECT
   p.skc_top_status,
   p.product_created_at,
   p.supplier_id,
-  p.shop_id,
+  s.id,
   COALESCE(s.shop_name, ''),
   p.created_at,
   p.updated_at
 FROM product_collection_products p
-LEFT JOIN shops s ON s.id = p.shop_id
+LEFT JOIN shops s ON s.platform = 'temu' AND s.external_code = p.supplier_id
 WHERE p.id = ?
 LIMIT 1`
 	var product models.ProductCollectionProduct
