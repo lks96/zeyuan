@@ -311,6 +311,7 @@ func (app appServer) routes() http.Handler {
 	mux.HandleFunc("POST /api/tools/delivery-extractions/import-source", app.requirePermission("tools:manage", app.handleImportDeliveryExtractSource))
 	mux.HandleFunc("POST /api/tools/delivery-extractions/import-json", app.requirePermission("tools:manage", app.handleImportDeliveryExtractJSON))
 	mux.HandleFunc("GET /api/tools/product-collection/products", app.requirePermission("tools:view", app.handleProductCollectionProducts))
+	mux.HandleFunc("GET /api/tools/product-collection/products/export", app.requirePermission("tools:view", app.handleExportProductCollectionProducts))
 	mux.HandleFunc("POST /api/tools/product-collection/import-json", app.requirePermission("tools:manage", app.handleImportProductCollectionJSON))
 	mux.HandleFunc("POST /api/tools/product-collection/products/batch-maintenance", app.requirePermission("tools:manage", app.handleBatchUpdateProductCollectionMaintenance))
 	mux.HandleFunc("PUT /api/tools/product-collection/products/{id}", app.requirePermission("tools:manage", app.handleUpdateProductCollectionProduct))
@@ -684,6 +685,31 @@ func (app appServer) handleProductCollectionProducts(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusOK, apiResponse{Data: products})
+}
+
+func (app appServer) handleExportProductCollectionProducts(w http.ResponseWriter, r *http.Request, _ models.User) {
+	options := productCollectionProductsOptionsFromRequest(r)
+	options.AllRows = true
+
+	products, err := app.store.ListProductCollectionProducts(r.Context(), options)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load product collection products")
+		return
+	}
+
+	workbook, err := buildProductCollectionWorkbook(r.Context(), products.Rows)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build product collection workbook")
+		return
+	}
+
+	filename := fmt.Sprintf("商品采集导出-%s.xlsx", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", deliveryExportContentDisposition(filename))
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(workbook); err != nil {
+		log.Printf("failed to write product collection workbook: %v", err)
+	}
 }
 
 func (app appServer) handleImportProductCollectionJSON(w http.ResponseWriter, r *http.Request, user models.User) {
@@ -1380,6 +1406,7 @@ func productCollectionProductsOptionsFromRequest(r *http.Request) store.ProductC
 	query := r.URL.Query()
 	options := store.ProductCollectionProductsOptions{
 		Query:    strings.TrimSpace(query.Get("q")),
+		ShopID:   int64(positiveQueryInt(query.Get("shopId"), 0, 0)),
 		Page:     positiveQueryInt(query.Get("page"), 1, 0),
 		PageSize: positiveQueryInt(query.Get("pageSize"), defaultPageSize, maxPageSize),
 	}

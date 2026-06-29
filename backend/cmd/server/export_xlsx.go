@@ -191,7 +191,11 @@ func newWPSDispImageID(index int) string {
 }
 
 func downloadExportImage(ctx context.Context, imageURL string) ([]byte, string, string, error) {
-	requestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	return downloadExportImageWithTimeout(ctx, imageURL, 15*time.Second)
+}
+
+func downloadExportImageWithTimeout(ctx context.Context, imageURL string, timeout time.Duration) ([]byte, string, string, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, imageURL, nil)

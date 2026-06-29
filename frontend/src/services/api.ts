@@ -114,6 +114,7 @@ export interface ProductCollectionList {
 
 export interface ProductCollectionQuery {
   q?: string
+  shopId?: number
   status?: number
   page?: number
   pageSize?: number
@@ -467,12 +468,22 @@ export async function importDeliveryExtractJson(payload: DeliveryExtractImportPa
 }
 
 export async function fetchProductCollectionProducts(params: ProductCollectionQuery = {}) {
-  const response = await api.get<ApiEnvelope<ProductCollectionList>>('/tools/product-collection/products', { params })
+  const response = await api.get<ApiEnvelope<ProductCollectionList>>('/tools/product-collection/products', { params: cleanQueryParams(params) })
   return response.data.data
 }
 
+export async function exportProductCollectionProducts(params: ProductCollectionQuery = {}) {
+  const response = await api.get<Blob>('/tools/product-collection/products/export', {
+    params: cleanQueryParams(params),
+    responseType: 'blob',
+  })
+  const disposition = response.headers['content-disposition'] as string | undefined
+  const filename = filenameFromDisposition(disposition) || 'product-collection.xlsx'
+  return { blob: response.data, filename }
+}
+
 export async function importProductCollectionJson(payload: ProductCollectionImportPayload, params: ProductCollectionQuery = {}) {
-  const response = await api.post<ApiEnvelope<ProductCollectionImportResult>>('/tools/product-collection/import-json', payload, { params })
+  const response = await api.post<ApiEnvelope<ProductCollectionImportResult>>('/tools/product-collection/import-json', payload, { params: cleanQueryParams(params) })
   return response.data.data
 }
 
@@ -485,9 +496,19 @@ export async function batchUpdateProductCollectionMaintenance(content: string, p
   const response = await api.post<ApiEnvelope<ProductCollectionBatchUpdateResult>>(
     '/tools/product-collection/products/batch-maintenance',
     { content },
-    { params },
+    { params: cleanQueryParams(params) },
   )
   return response.data.data
+}
+
+function cleanQueryParams(params: object) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => {
+      if (value === undefined || value === null || value === '') return false
+      if (typeof value === 'number' && Number.isNaN(value)) return false
+      return true
+    }),
+  )
 }
 
 function filenameFromDisposition(disposition?: string) {

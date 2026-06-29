@@ -4,6 +4,7 @@ build/
 .vite/
 .run/
 logs/
+backend/.cache/
 
 *.exe
 *.test

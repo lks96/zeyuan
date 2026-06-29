@@ -20,6 +20,7 @@
   "backend": {
     "routes": [
       "GET /api/tools/product-collection/products",
+      "GET /api/tools/product-collection/products/export",
       "POST /api/tools/product-collection/import-json",
       "POST /api/tools/product-collection/products/batch-maintenance",
       "PUT /api/tools/product-collection/products/{id}"

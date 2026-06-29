@@ -18,6 +18,7 @@ import {
   batchUpdateProductCollectionMaintenance,
   exportExtensionArchive,
   exportLatestDeliveryExtractBatch,
+  exportProductCollectionProducts,
   exportToolPackageArchive,
   fetchLatestDeliveryExtractBatch,
   fetchProductCollectionProducts,
@@ -50,6 +51,7 @@ const productCollection = ref<ProductCollectionList | null>(null)
 const isLoading = ref(true)
 const isImporting = ref(false)
 const isProductImporting = ref(false)
+const isProductExporting = ref(false)
 const isProductSearching = ref(false)
 const isProductSaving = ref(false)
 const isExporting = ref(false)
@@ -155,22 +157,21 @@ async function loadToolCenter() {
   clearSelectedDeliveryRows()
 
   try {
-    const [packagePayload, latestPayload, productPayload, shopPayload] = await Promise.all([
+    const [packagePayload, latestPayload, shopPayload] = await Promise.all([
       fetchToolPackages(),
       fetchLatestDeliveryExtractBatch(buildLatestExtractQuery()),
-      fetchProductCollectionProducts(buildProductQuery()),
       fetchShops(),
     ])
     toolPackages.value = packagePayload
     latestBatch.value = latestPayload
     const latestDate = batchDateToInputValue(latestPayload?.date)
     selectedDate.value = latestDate || todayInputValue()
-    productCollection.value = productPayload
     shops.value = shopPayload
     ensureActiveTool(packagePayload)
     if (!selectedShopId.value && shopPayload.length > 0) {
       selectedShopId.value = shopPayload[0].id
     }
+    productCollection.value = await fetchProductCollectionProducts(buildProductQuery())
   } catch {
     apiError.value = '无法加载工具中心数据，请检查后端服务或当前账号权限。'
   } finally {
@@ -358,6 +359,15 @@ function buildProductQuery() {
     page: productCurrentPage.value,
     pageSize: defaultPageSize,
     q: productActiveQuery.value || undefined,
+    shopId: selectedShopIdNumber() || undefined,
+    status: productStatusFilter.value === '' ? undefined : Number(productStatusFilter.value),
+  }
+}
+
+function buildProductExportQuery() {
+  return {
+    q: productActiveQuery.value || undefined,
+    shopId: selectedShopIdNumber() || undefined,
     status: productStatusFilter.value === '' ? undefined : Number(productStatusFilter.value),
   }
 }
@@ -401,6 +411,11 @@ function ensureSelectedShop() {
   if (selectedShopIdNumber() > 0) return true
   apiError.value = '请先选择店铺后再导入商品数据。'
   return false
+}
+
+async function changeProductShop() {
+  productCurrentPage.value = 1
+  await loadProductCollection()
 }
 
 function triggerProductFileImport() {
@@ -483,6 +498,20 @@ async function exportDeliveryRows() {
     apiError.value = '导出失败，请稍后重试。'
   } finally {
     isExporting.value = false
+  }
+}
+
+async function exportProductRows() {
+  isProductExporting.value = true
+  apiError.value = ''
+
+  try {
+    const { blob, filename } = await exportProductCollectionProducts(buildProductExportQuery())
+    downloadBlob(blob, filename)
+  } catch {
+    apiError.value = '商品采集导出失败，请稍后重试。'
+  } finally {
+    isProductExporting.value = false
   }
 }
 
@@ -935,8 +964,8 @@ function batchDateToInputValue(batchDate?: string) {
 
     <div class="extract-control-bar product-control-bar">
       <label class="field-control product-shop-field">
-        <span>导入店铺</span>
-        <select v-model="selectedShopId">
+        <span>店铺</span>
+        <select v-model="selectedShopId" @change="changeProductShop">
           <option value="">请选择店铺</option>
           <option v-for="shop in shops" :key="shop.id" :value="shop.id">
             {{ shop.shopName }}（{{ shop.externalCode || '无编号' }}）
@@ -962,6 +991,10 @@ function batchDateToInputValue(batchDate?: string) {
         <va-button v-if="canManageTools" preset="secondary" :disabled="isProductBatchUpdating" @click="openProductBatchModal">
           <ClipboardPaste :size="18" />
           批量设置成本/配置
+        </va-button>
+        <va-button preset="secondary" :loading="isProductExporting" :disabled="isProductSearching" @click="exportProductRows">
+          <Download :size="18" />
+          导出 Excel
         </va-button>
       </div>
     </div>

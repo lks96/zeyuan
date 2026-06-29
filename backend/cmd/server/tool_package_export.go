@@ -107,6 +107,9 @@ func toolPackageExportFiles(toolID string) []toolPackageExportFile {
 		return append([]toolPackageExportFile{
 			{Source: "tools/builtin/product-research/manifest.json", Target: "source/manifest.json"},
 			{Source: "backend/migrations/012_product_collection.sql", Target: "migrations/012_product_collection.sql"},
+			{Source: "backend/cmd/server/export_xlsx.go", Target: "backend/cmd/server/export_xlsx.go"},
+			{Source: "backend/cmd/server/export_image_cache.go", Target: "backend/cmd/server/export_image_cache.go"},
+			{Source: "backend/cmd/server/product_export_xlsx.go", Target: "backend/cmd/server/product_export_xlsx.go"},
 		}, common...)
 	default:
 		return append([]toolPackageExportFile{
@@ -150,6 +153,7 @@ func exportedToolRoutes(pkg models.ToolPackage) []byte {
 		},
 		"product-research": {
 			"GET /api/tools/product-collection/products",
+			"GET /api/tools/product-collection/products/export",
 			"POST /api/tools/product-collection/import-json",
 			"POST /api/tools/product-collection/products/batch-maintenance",
 			"PUT /api/tools/product-collection/products/{id}",

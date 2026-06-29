@@ -92,10 +92,12 @@ type SaveProductCollectionParams struct {
 
 type ProductCollectionProductsOptions struct {
 	Query     string
+	ShopID    int64
 	Status    int
 	HasStatus bool
 	Page      int
 	PageSize  int
+	AllRows   bool
 }
 
 type UpdateProductCollectionProductParams struct {
@@ -1161,6 +1163,10 @@ func (s *Store) ListProductCollectionProducts(ctx context.Context, options Produ
 		keyword := "%" + options.Query + "%"
 		args = append(args, keyword, keyword, keyword, keyword, keyword, keyword)
 	}
+	if options.ShopID > 0 {
+		whereClause += " AND p.shop_id = ?"
+		args = append(args, options.ShopID)
+	}
 	if options.HasStatus {
 		whereClause += " AND p.skc_top_status = ?"
 		args = append(args, options.Status)
@@ -1180,6 +1186,9 @@ LEFT JOIN shops s ON s.id = p.shop_id
 ` + whereClause
 	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&list.RowsTotal); err != nil {
 		return models.ProductCollectionList{}, err
+	}
+	if options.AllRows {
+		list.PageSize = list.RowsTotal
 	}
 
 	rowQuery := `
@@ -1203,9 +1212,13 @@ SELECT
 FROM product_collection_products p
 LEFT JOIN shops s ON s.id = p.shop_id
 ` + whereClause + `
-ORDER BY p.product_created_at IS NULL ASC, p.product_created_at DESC, p.id DESC
+ORDER BY p.product_created_at IS NULL ASC, p.product_created_at DESC, p.id DESC`
+	rowArgs := args
+	if !options.AllRows {
+		rowQuery += `
 LIMIT ? OFFSET ?`
-	rowArgs := append(args, options.PageSize, (options.Page-1)*options.PageSize)
+		rowArgs = append(rowArgs, options.PageSize, (options.Page-1)*options.PageSize)
+	}
 	rows, err := s.db.QueryContext(ctx, rowQuery, rowArgs...)
 	if err != nil {
 		return models.ProductCollectionList{}, err
@@ -1393,6 +1406,10 @@ func normalizeDeliveryExtractRowsOptions(options DeliveryExtractRowsOptions) Del
 
 func normalizeProductCollectionProductsOptions(options ProductCollectionProductsOptions) ProductCollectionProductsOptions {
 	options.Query = strings.TrimSpace(options.Query)
+	if options.AllRows {
+		options.Page = 1
+		return options
+	}
 	if options.Page <= 0 {
 		options.Page = 1
 	}
