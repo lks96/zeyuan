@@ -34,7 +34,6 @@ type CreateShopParams struct {
 	Platform         string
 	ExternalCode     string
 	EuRepresentative string
-	ShopURL          string
 	Status           string
 	CreatedBy        int64
 }
@@ -44,7 +43,6 @@ type UpdateShopParams struct {
 	Platform         string
 	ExternalCode     string
 	EuRepresentative string
-	ShopURL          string
 	Status           string
 }
 
@@ -53,7 +51,6 @@ type UpsertShopParams struct {
 	Platform         string
 	ExternalCode     string
 	EuRepresentative string
-	ShopURL          string
 	Status           string
 	CreatedBy        int64
 }
@@ -386,7 +383,7 @@ func (s *Store) ListVisibleShops(ctx context.Context, user models.User) ([]model
 
 func (s *Store) GetShop(ctx context.Context, id int64) (models.Shop, error) {
 	const query = `
-SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, shop_url, status, created_at
+SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, status, created_at
 FROM shops
 WHERE id = ?
 LIMIT 1`
@@ -398,20 +395,23 @@ LIMIT 1`
 		&shop.Platform,
 		&shop.ExternalCode,
 		&shop.EuRepresentative,
-		&shop.ShopURL,
 		&shop.Status,
 		&shop.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.Shop{}, ErrNotFound
 	}
-	return shop, err
+	if err != nil {
+		return models.Shop{}, err
+	}
+	shop.ShopURL = temuMallURL(shop.ExternalCode)
+	return shop, nil
 }
 
 func (s *Store) CreateShop(ctx context.Context, params CreateShopParams) (models.Shop, error) {
 	const query = `
-INSERT INTO shops (shop_name, platform, external_code, eu_representative, shop_url, status, created_by)
-VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
+INSERT INTO shops (shop_name, platform, external_code, eu_representative, status, created_by)
+VALUES (?, ?, NULLIF(?, ''), ?, ?, ?)`
 
 	result, err := s.db.ExecContext(
 		ctx,
@@ -420,7 +420,6 @@ VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
 		params.Platform,
 		params.ExternalCode,
 		params.EuRepresentative,
-		params.ShopURL,
 		params.Status,
 		params.CreatedBy,
 	)
@@ -437,12 +436,11 @@ VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)`
 
 func (s *Store) UpsertShopByExternalCode(ctx context.Context, params UpsertShopParams) (models.Shop, error) {
 	const query = `
-INSERT INTO shops (shop_name, platform, external_code, eu_representative, shop_url, status, created_by)
-VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?)
+INSERT INTO shops (shop_name, platform, external_code, eu_representative, status, created_by)
+VALUES (?, ?, NULLIF(?, ''), ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   shop_name = VALUES(shop_name),
-  eu_representative = VALUES(eu_representative),
-  shop_url = VALUES(shop_url),
+  eu_representative = IF(VALUES(eu_representative) = '', eu_representative, VALUES(eu_representative)),
   status = VALUES(status)`
 
 	if _, err := s.db.ExecContext(
@@ -452,7 +450,6 @@ ON DUPLICATE KEY UPDATE
 		params.Platform,
 		params.ExternalCode,
 		params.EuRepresentative,
-		params.ShopURL,
 		params.Status,
 		params.CreatedBy,
 	); err != nil {
@@ -464,7 +461,7 @@ ON DUPLICATE KEY UPDATE
 
 func (s *Store) GetShopByPlatformExternalCode(ctx context.Context, platform string, externalCode string) (models.Shop, error) {
 	const query = `
-SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, shop_url, status, created_at
+SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, status, created_at
 FROM shops
 WHERE platform = ? AND external_code = ?
 LIMIT 1`
@@ -476,20 +473,23 @@ LIMIT 1`
 		&shop.Platform,
 		&shop.ExternalCode,
 		&shop.EuRepresentative,
-		&shop.ShopURL,
 		&shop.Status,
 		&shop.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return models.Shop{}, ErrNotFound
 	}
-	return shop, err
+	if err != nil {
+		return models.Shop{}, err
+	}
+	shop.ShopURL = temuMallURL(shop.ExternalCode)
+	return shop, nil
 }
 
 func (s *Store) UpdateShop(ctx context.Context, id int64, params UpdateShopParams) (models.Shop, error) {
 	const query = `
 UPDATE shops
-SET shop_name = ?, platform = ?, external_code = NULLIF(?, ''), eu_representative = ?, shop_url = ?, status = ?
+SET shop_name = ?, platform = ?, external_code = NULLIF(?, ''), eu_representative = ?, status = ?
 WHERE id = ?`
 
 	_, err := s.db.ExecContext(
@@ -499,7 +499,6 @@ WHERE id = ?`
 		params.Platform,
 		params.ExternalCode,
 		params.EuRepresentative,
-		params.ShopURL,
 		params.Status,
 		id,
 	)
@@ -1527,7 +1526,7 @@ WHERE id = ?`
 
 func (s *Store) listAllShops(ctx context.Context) ([]models.Shop, error) {
 	const query = `
-SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, shop_url, status, created_at
+SELECT id, shop_name, platform, COALESCE(external_code, ''), eu_representative, status, created_at
 FROM shops
 ORDER BY id ASC`
 
@@ -1546,12 +1545,12 @@ ORDER BY id ASC`
 			&shop.Platform,
 			&shop.ExternalCode,
 			&shop.EuRepresentative,
-			&shop.ShopURL,
 			&shop.Status,
 			&shop.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
+		shop.ShopURL = temuMallURL(shop.ExternalCode)
 		shops = append(shops, shop)
 	}
 
@@ -1560,7 +1559,7 @@ ORDER BY id ASC`
 
 func (s *Store) listUserShops(ctx context.Context, userID int64) ([]models.Shop, error) {
 	const query = `
-SELECT s.id, s.shop_name, s.platform, COALESCE(s.external_code, ''), s.eu_representative, s.shop_url, s.status, us.shop_role, s.created_at
+SELECT s.id, s.shop_name, s.platform, COALESCE(s.external_code, ''), s.eu_representative, s.status, us.shop_role, s.created_at
 FROM shops s
 INNER JOIN user_shops us ON us.shop_id = s.id
 WHERE us.user_id = ?
@@ -1581,17 +1580,25 @@ ORDER BY s.id ASC`
 			&shop.Platform,
 			&shop.ExternalCode,
 			&shop.EuRepresentative,
-			&shop.ShopURL,
 			&shop.Status,
 			&shop.ShopRole,
 			&shop.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
+		shop.ShopURL = temuMallURL(shop.ExternalCode)
 		shops = append(shops, shop)
 	}
 
 	return shops, rows.Err()
+}
+
+func temuMallURL(externalCode string) string {
+	externalCode = strings.TrimSpace(externalCode)
+	if externalCode == "" {
+		return ""
+	}
+	return "https://www.temu.com/mall.html?mall_id=" + externalCode
 }
 
 func (s *Store) count(ctx context.Context, table string) (int, error) {

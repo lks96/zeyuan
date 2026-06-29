@@ -77,7 +77,6 @@ type createShopRequest struct {
 	Platform         string `json:"platform"`
 	ExternalCode     string `json:"externalCode"`
 	EuRepresentative string `json:"euRepresentative"`
-	ShopURL          string `json:"shopUrl"`
 	Status           string `json:"status"`
 }
 
@@ -86,7 +85,6 @@ type updateShopRequest struct {
 	Platform         string `json:"platform"`
 	ExternalCode     string `json:"externalCode"`
 	EuRepresentative string `json:"euRepresentative"`
-	ShopURL          string `json:"shopUrl"`
 	Status           string `json:"status"`
 }
 
@@ -145,7 +143,6 @@ type extensionSellerShopSyncResponse struct {
 type sellerShopCandidate struct {
 	ExternalCode string
 	ShopName     string
-	ShopURL      string
 }
 
 type updateProductCollectionProductRequest struct {
@@ -878,7 +875,6 @@ func (app appServer) handleSyncExtensionSellerShops(w http.ResponseWriter, r *ht
 			Platform:         "temu",
 			ExternalCode:     candidate.ExternalCode,
 			EuRepresentative: "",
-			ShopURL:          candidate.ShopURL,
 			Status:           "active",
 			CreatedBy:        user.ID,
 		})
@@ -1053,7 +1049,6 @@ func (app appServer) handleCreateShop(w http.ResponseWriter, r *http.Request, us
 		Platform:         request.Platform,
 		ExternalCode:     request.ExternalCode,
 		EuRepresentative: request.EuRepresentative,
-		ShopURL:          request.ShopURL,
 		Status:           request.Status,
 		CreatedBy:        user.ID,
 	})
@@ -1087,7 +1082,6 @@ func (app appServer) handleUpdateShop(w http.ResponseWriter, r *http.Request, _ 
 		Platform:         request.Platform,
 		ExternalCode:     request.ExternalCode,
 		EuRepresentative: request.EuRepresentative,
-		ShopURL:          request.ShopURL,
 		Status:           request.Status,
 	})
 	if errors.Is(err, store.ErrNotFound) {
@@ -1550,12 +1544,10 @@ func collectSellerShopCandidates(value any, candidates map[string]sellerShopCand
 		candidate := sellerShopCandidate{
 			ExternalCode: firstJSONTextByKeys(typed, "mallId", "mallID", "mallid", "mall_id", "mallIdStr", "supplierId", "sellerId", "merchantId"),
 			ShopName:     firstJSONTextByKeys(typed, "mallName", "mall_name", "mallDisplayName", "shopName", "shop_name", "storeName", "store_name", "sellerName", "merchantName", "companyName"),
-			ShopURL:      firstJSONTextByKeys(typed, "shopUrl", "shopURL", "mallUrl", "storeUrl"),
 		}
 		if candidate.ExternalCode != "" {
 			if existing, ok := candidates[candidate.ExternalCode]; ok {
 				candidate.ShopName = firstNonEmptyString(candidate.ShopName, existing.ShopName)
-				candidate.ShopURL = firstNonEmptyString(candidate.ShopURL, existing.ShopURL)
 			}
 			candidates[candidate.ExternalCode] = candidate
 		}
@@ -1660,7 +1652,6 @@ func (request *createShopRequest) normalize() {
 	request.Platform = strings.TrimSpace(request.Platform)
 	request.ExternalCode = strings.TrimSpace(request.ExternalCode)
 	request.EuRepresentative = strings.TrimSpace(request.EuRepresentative)
-	request.ShopURL = strings.TrimSpace(request.ShopURL)
 	if request.Platform == "" {
 		request.Platform = "temu"
 	}
@@ -1674,7 +1665,6 @@ func (request *updateShopRequest) normalize() {
 	request.Platform = strings.TrimSpace(request.Platform)
 	request.ExternalCode = strings.TrimSpace(request.ExternalCode)
 	request.EuRepresentative = strings.TrimSpace(request.EuRepresentative)
-	request.ShopURL = strings.TrimSpace(request.ShopURL)
 	if request.Platform == "" {
 		request.Platform = "temu"
 	}

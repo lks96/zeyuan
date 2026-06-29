@@ -28,7 +28,7 @@ type Shop struct {
 	Platform         string    `json:"platform"`
 	ExternalCode     string    `json:"externalCode"`
 	EuRepresentative string    `json:"euRepresentative"`
-	ShopURL          string    `json:"shopUrl"`
+	ShopURL          string    `json:"shopUrl,omitempty"`
 	Status           string    `json:"status"`
 	ShopRole         string    `json:"shopRole,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`

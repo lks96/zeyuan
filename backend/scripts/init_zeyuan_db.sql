@@ -66,7 +66,6 @@ CREATE TABLE IF NOT EXISTS shops (
   platform VARCHAR(32) NOT NULL DEFAULT 'temu' COMMENT '所属平台',
   external_code VARCHAR(128) NULL COMMENT '平台店铺编号',
   eu_representative VARCHAR(255) NOT NULL DEFAULT '' COMMENT '欧代信息',
-  shop_url VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '店铺URL',
   status ENUM('active', 'paused', 'closed') NOT NULL DEFAULT 'active' COMMENT '店铺状态',
   created_by BIGINT UNSIGNED NULL COMMENT '创建人用户ID',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -241,13 +240,12 @@ ON DUPLICATE KEY UPDATE
   role = VALUES(role),
   status = VALUES(status);
 
-INSERT INTO shops (id, shop_name, platform, external_code, eu_representative, shop_url, status, created_by)
+INSERT INTO shops (id, shop_name, platform, external_code, eu_representative, status, created_by)
 VALUES
-  (1, 'Kunsong Grocery', 'temu', '634418227150594', '', '', 'active', 1)
+  (1, 'Kunsong Grocery', 'temu', '634418227150594', '', 'active', 1)
 ON DUPLICATE KEY UPDATE
   shop_name = VALUES(shop_name),
-  eu_representative = VALUES(eu_representative),
-  shop_url = VALUES(shop_url),
+  eu_representative = IF(VALUES(eu_representative) = '', eu_representative, VALUES(eu_representative)),
   status = VALUES(status),
   created_by = VALUES(created_by);
 
@@ -417,7 +415,8 @@ VALUES
   ('012', '012_product_collection.sql', 'd7243c493d715f6e99bff20c62c9d3b84dfce0fec016d32baa6c75fef09d6112'),
   ('013', '013_delivery_extract_express_batch.sql', '0291043eb5b65c079bb2a1f534af29dc116bcb62069698ebfea3977bbace9b9b'),
   ('014', '014_tool_packages.sql', '4e6c8b2dcb8c202beda1a36d21560eb4d0e0bf698fe02cdae073f3a678e312c0'),
-  ('015', '015_product_collection_supplier_shop_link.sql', 'ba4dc6ab62f7bcc6a37985329c0c67d8afd34719b2fbea362be95ad23ec370c9')
+  ('015', '015_product_collection_supplier_shop_link.sql', 'ba4dc6ab62f7bcc6a37985329c0c67d8afd34719b2fbea362be95ad23ec370c9'),
+  ('016', '016_remove_shop_url.sql', 'daedad226e5ef7f510a1a037b00a4fab3680d2f949934760c47f297cf38b9984')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   checksum = VALUES(checksum);

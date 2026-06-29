@@ -18,7 +18,6 @@ type ShopForm = {
   platform: string
   externalCode: string
   euRepresentative: string
-  shopUrl: string
   status: Shop['status']
 }
 
@@ -34,7 +33,6 @@ const emptyShopForm = (): ShopForm => ({
   platform: 'temu',
   externalCode: '',
   euRepresentative: '',
-  shopUrl: '',
   status: 'active',
 })
 
@@ -87,7 +85,6 @@ function openEditShop(shop: Shop) {
     platform: shop.platform,
     externalCode: shop.externalCode,
     euRepresentative: shop.euRepresentative,
-    shopUrl: shop.shopUrl,
     status: shop.status,
   }
   apiError.value = ''
@@ -111,7 +108,6 @@ async function saveShop() {
         platform: shopForm.value.platform,
         externalCode: shopForm.value.externalCode,
         euRepresentative: shopForm.value.euRepresentative,
-        shopUrl: shopForm.value.shopUrl,
         status: shopForm.value.status,
       }
       await updateShop(shopForm.value.id, payload)
@@ -122,7 +118,6 @@ async function saveShop() {
         platform: shopForm.value.platform,
         externalCode: shopForm.value.externalCode,
         euRepresentative: shopForm.value.euRepresentative,
-        shopUrl: shopForm.value.shopUrl,
         status: shopForm.value.status,
       }
       await createShop(payload)
@@ -271,10 +266,6 @@ function statusColor(status: Shop['status']) {
         <label class="field-control">
           <span>欧代</span>
           <input v-model.trim="shopForm.euRepresentative" placeholder="可选" />
-        </label>
-        <label class="field-control field-control-wide">
-          <span>店铺URL</span>
-          <input v-model.trim="shopForm.shopUrl" type="url" placeholder="可选" />
         </label>
         <label class="field-control">
           <span>状态</span>

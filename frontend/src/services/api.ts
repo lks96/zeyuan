@@ -185,7 +185,6 @@ export interface CreateShopPayload {
   platform?: string
   externalCode?: string
   euRepresentative?: string
-  shopUrl?: string
   status?: Shop['status']
 }
 
@@ -194,7 +193,6 @@ export interface UpdateShopPayload {
   platform: string
   externalCode?: string
   euRepresentative?: string
-  shopUrl?: string
   status: Shop['status']
 }
 
