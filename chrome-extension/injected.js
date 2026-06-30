@@ -6,11 +6,13 @@
   const maxDepth = 8
   const deliveryBatchEndpoint = '/bgSongbird-api/supplier/deliverGoods/management/pageQueryDeliveryBatch'
   const productSkcEndpoint = '/visage-agent-seller/product/skc/pageQuery'
+  const salesOverallEndpoint = '/mms/venom/api/supplier/sales/management/listOverall'
   const sellerUserInfoEndpoint = '/api/seller/auth/userInfo'
   const maxAutoPages = 300
   const latestReusableHeaders = {
     product: {},
     delivery: {},
+    sales: {},
   }
 
   const originalFetch = window.fetch
@@ -119,6 +121,7 @@
       message.type !== 'TEMU_TOOLS_FETCH_ALL' &&
       message.type !== 'TEMU_TOOLS_FETCH_LATEST_PRODUCT' &&
       message.type !== 'TEMU_TOOLS_FETCH_LATEST_DELIVERY' &&
+      message.type !== 'TEMU_TOOLS_FETCH_SALES_OVERALL' &&
       message.type !== 'TEMU_TOOLS_FETCH_SELLER_USER_INFO'
     ) {
       return
@@ -127,7 +130,9 @@
     try {
       const capture =
         message.type === 'TEMU_TOOLS_FETCH_ALL'
-          ? await fetchAllPages(message.payload?.kind, message.payload?.capture)
+          ? await fetchAllPages(message.payload?.kind, message.payload?.capture, message.payload?.salesSkcs)
+          : message.type === 'TEMU_TOOLS_FETCH_SALES_OVERALL'
+            ? await fetchAllSalesPages(message.payload?.capture, message.payload?.salesSkcs)
           : message.type === 'TEMU_TOOLS_FETCH_LATEST_DELIVERY'
             ? await fetchLatestDelivery()
             : message.type === 'TEMU_TOOLS_FETCH_SELLER_USER_INFO'
@@ -271,12 +276,15 @@
     }
   }
 
-  async function fetchAllPages(kind, capture) {
+  async function fetchAllPages(kind, capture, salesSkcs = []) {
     if (!capture?.requestUrl || !capture.requestBody) {
       throw new Error('当前缓存没有可复用的请求信息，请先刷新或翻页触发一次列表接口')
     }
 
     const detectedKind = kind || detectPayloadKind(capture.data, capture.requestUrl)
+    if (detectedKind === 'sales') {
+      return fetchAllSalesPages(capture, salesSkcs)
+    }
     const pageField = detectedKind === 'delivery' ? 'pageNo' : 'page'
     const body = JSON.parse(capture.requestBody)
     const pageSize = Number(body.pageSize || 20)
@@ -341,9 +349,98 @@
     }
   }
 
+  async function fetchAllSalesPages(capture, salesSkcs) {
+    if (!capture?.requestUrl || !capture.requestBody) {
+      throw new Error('当前缓存没有可复用的销售请求信息，请先在销售页面触发一次 listOverall 接口')
+    }
+    if (!Array.isArray(salesSkcs) || salesSkcs.length === 0) {
+      throw new Error('系统内没有可用于查询销售数据的在售 SKC')
+    }
+
+    const body = JSON.parse(capture.requestBody)
+    const pageSize = positiveNumber(body.pageSize, 10)
+    const productSkcIdList = salesSkcs.map((skc) => Number(skc)).filter((skc) => Number.isFinite(skc) && skc > 0)
+    if (!productSkcIdList.length) {
+      throw new Error('系统维护的在售 SKC 不是有效数字')
+    }
+
+    const headers = sanitizeHeaders({
+      ...latestReusableHeaders.sales,
+      ...(capture.requestHeaders || {}),
+    })
+    const pages = []
+    let total = 0
+    let listPath = null
+    let template = null
+
+    for (let page = 1; page <= maxAutoPages; page += 1) {
+      const pageBody = {
+        ...body,
+        pageNo: page,
+        pageSize,
+        productSkcIdList,
+      }
+      const response = await originalFetch(capture.requestUrl, {
+        method: capture.method || 'POST',
+        headers,
+        body: JSON.stringify(pageBody),
+        credentials: 'include',
+        cache: 'no-store',
+      })
+
+      if (!response.ok) {
+        throw new Error(`销售数据第 ${page} 页请求失败：HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      const pageInfo = getPagedListInfo(data)
+      if (!pageInfo.items.length) break
+
+      if (!template) {
+        template = data
+        listPath = pageInfo.path
+      }
+
+      pages.push(...pageInfo.items)
+      total = firstPositiveNumber(pageInfo.total, total)
+
+      const expectedPages = total > 0 ? Math.ceil(total / pageSize) : 0
+      if ((expectedPages > 0 && page >= expectedPages) || (total > 0 && pages.length >= total)) break
+      if (pageInfo.items.length < pageSize) break
+      await sleep(160)
+    }
+
+    if (!template || !listPath) {
+      throw new Error('没有抓取到任何销售数据')
+    }
+
+    const merged = structuredCloneSafe(template)
+    setPathValue(merged, listPath, pages)
+    setTotalValue(merged, total || pages.length)
+
+    return {
+      ...capture,
+      kind: 'sales',
+      data: merged,
+      requestHeaders: headers,
+      requestBody: JSON.stringify({
+        ...body,
+        pageNo: 1,
+        pageSize,
+        productSkcIdList,
+      }),
+      capturedAt: new Date().toISOString(),
+      itemCount: pages.length,
+      autoFetched: true,
+      autoFetchTotal: pages.length,
+    }
+  }
+
   function detectPayloadKind(data, requestUrl) {
+    if (isSalesOverallEndpoint(requestUrl)) return 'sales'
     if (isDeliveryBatchEndpoint(requestUrl)) return 'delivery'
     if (isProductSkcEndpoint(requestUrl)) return 'product'
+    if (containsMatchingObject(data, isSalesOverallItem, 0)) return 'sales'
     if (containsMatchingObject(data, isProductItem, 0)) return 'product'
     if (containsMatchingObject(data, isDeliveryItem, 0)) return 'delivery'
     return ''
@@ -357,6 +454,9 @@
     }
     if (isDeliveryHost(meta.url) || isDeliveryBatchEndpoint(meta.url)) {
       latestReusableHeaders.delivery = { ...latestReusableHeaders.delivery, ...headers }
+    }
+    if (isProductHost(meta.url) || isSalesOverallEndpoint(meta.url)) {
+      latestReusableHeaders.sales = { ...latestReusableHeaders.sales, ...headers }
     }
   }
 
@@ -405,6 +505,10 @@
     return matchesEndpointPath(requestUrl, productSkcEndpoint)
   }
 
+  function isSalesOverallEndpoint(requestUrl) {
+    return matchesEndpointPath(requestUrl, salesOverallEndpoint)
+  }
+
   function matchesEndpointPath(requestUrl, endpointPath) {
     try {
       return new URL(requestUrl, location.href).pathname === endpointPath
@@ -431,6 +535,16 @@
         hasOwn(value, 'productSkuId') ||
         hasOwn(value, 'mainImageUrl')) &&
       (hasOwn(value, 'productName') || hasOwn(value, 'supplierPrice'))
+    )
+  }
+
+  function isSalesOverallItem(value) {
+    return (
+      hasOwn(value, 'productSkcId') &&
+      (hasOwn(value, 'skuQuantityDetailList') ||
+        hasOwn(value, 'skuQuantityTotalInfo') ||
+        hasOwn(value, 'productSkcPicture')) &&
+      (hasOwn(value, 'supplierId') || hasOwn(value, 'supplierName'))
     )
   }
 
@@ -498,9 +612,11 @@
 
   function getPagedListInfo(data) {
     const candidates = [
+      { path: ['result', 'subOrderList'], items: data?.result?.subOrderList, total: data?.result?.total },
       { path: ['result', 'list'], items: data?.result?.list, total: data?.result?.total },
       { path: ['result', 'pageItems'], items: data?.result?.pageItems, total: data?.result?.total },
       { path: ['result', 'data'], items: data?.result?.data, total: data?.result?.total },
+      { path: ['subOrderList'], items: data?.subOrderList, total: data?.total },
       { path: ['list'], items: data?.list, total: data?.total },
       { path: ['data'], items: data?.data, total: data?.total },
       { path: [], items: Array.isArray(data) ? data : null, total: Array.isArray(data) ? data.length : 0 },
@@ -534,6 +650,11 @@
       if (Number.isFinite(number) && number > 0) return number
     }
     return 0
+  }
+
+  function positiveNumber(value, fallback) {
+    const number = Number(value)
+    return Number.isFinite(number) && number > 0 ? number : fallback
   }
 
   function structuredCloneSafe(value) {

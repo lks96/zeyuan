@@ -325,6 +325,11 @@ select:focus {
   background: #ffedd5;
 }
 
+.task-badge-sales {
+  color: #14532d;
+  background: #dcfce7;
+}
+
 .task-actions {
   display: grid;
   grid-template-columns: auto 84px;

@@ -31,6 +31,7 @@
       message?.type !== 'FETCH_ALL_CAPTURE' &&
       message?.type !== 'FETCH_LATEST_PRODUCT' &&
       message?.type !== 'FETCH_LATEST_DELIVERY' &&
+      message?.type !== 'FETCH_SALES_OVERALL' &&
       message?.type !== 'FETCH_SELLER_USER_INFO'
     ) {
       return false
@@ -53,6 +54,8 @@
         type:
           message.type === 'FETCH_ALL_CAPTURE'
             ? 'TEMU_TOOLS_FETCH_ALL'
+            : message.type === 'FETCH_SALES_OVERALL'
+              ? 'TEMU_TOOLS_FETCH_SALES_OVERALL'
             : message.type === 'FETCH_LATEST_DELIVERY'
               ? 'TEMU_TOOLS_FETCH_LATEST_DELIVERY'
               : message.type === 'FETCH_SELLER_USER_INFO'
@@ -62,6 +65,7 @@
         payload: {
           kind: message.kind,
           capture: message.capture,
+          salesSkcs: message.salesSkcs,
         },
       },
       '*',

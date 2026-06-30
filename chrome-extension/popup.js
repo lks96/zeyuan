@@ -14,8 +14,10 @@ const injectButton = document.querySelector('#injectButton')
 const shopSelect = document.querySelector('#shopSelect')
 const autoProductSyncInput = document.querySelector('#autoProductSync')
 const autoDeliverySyncInput = document.querySelector('#autoDeliverySync')
+const autoSalesSyncInput = document.querySelector('#autoSalesSync')
 const checkLatestProductButton = document.querySelector('#checkLatestProductButton')
 const checkLatestDeliveryButton = document.querySelector('#checkLatestDeliveryButton')
+const syncSalesOverallButton = document.querySelector('#syncSalesOverallButton')
 const capturesEl = document.querySelector('#captures')
 const statusEl = document.querySelector('#status')
 
@@ -32,9 +34,11 @@ syncSellerShopButton.addEventListener('click', () => syncSellerShop({ manual: tr
 injectButton.addEventListener('click', injectActiveTab)
 checkLatestProductButton.addEventListener('click', checkLatestProduct)
 checkLatestDeliveryButton.addEventListener('click', checkLatestDelivery)
+syncSalesOverallButton.addEventListener('click', syncSalesOverall)
 shopSelect.addEventListener('change', saveSelectedShop)
 autoProductSyncInput.addEventListener('change', saveSettings)
 autoDeliverySyncInput.addEventListener('change', saveSettings)
+autoSalesSyncInput.addEventListener('change', saveSettings)
 
 async function init() {
   await loadState()
@@ -48,6 +52,7 @@ async function loadState() {
   currentState = response
   autoProductSyncInput.checked = Boolean(response.settings.autoProductSync)
   autoDeliverySyncInput.checked = Boolean(response.settings.autoDeliverySync)
+  autoSalesSyncInput.checked = Boolean(response.settings.autoSalesSync)
   apiBaseHint.textContent = apiHostText(response.settings.apiBase)
   renderAuthState()
   renderCaptures(response.latestCaptures || {})
@@ -79,6 +84,7 @@ async function saveSettings() {
       shopName: currentState?.settings?.shopName || '',
       autoProductSync: autoProductSyncInput.checked,
       autoDeliverySync: autoDeliverySyncInput.checked,
+      autoSalesSync: autoSalesSyncInput.checked,
     },
   })
   currentState.settings = response.settings
@@ -140,6 +146,7 @@ async function saveSelectedShop() {
       shopName: selected?.shopName || '',
       autoProductSync: autoProductSyncInput.checked,
       autoDeliverySync: autoDeliverySyncInput.checked,
+      autoSalesSync: autoSalesSyncInput.checked,
     },
   })
   currentState.settings = response.settings
@@ -190,6 +197,17 @@ async function checkLatestDelivery() {
   })
 }
 
+async function syncSalesOverall() {
+  await saveSettings()
+  await withBusy(syncSalesOverallButton, async () => {
+    const response = await sendMessage({ type: 'SYNC_SALES_OVERALL' })
+    await loadState()
+    const imported = response.result?.syncResult?.batch?.importedTotal
+    const total = imported ?? response.result?.autoFetchTotal ?? 0
+    setStatus(`销售数据同步完成：${total} 条。`, 'success')
+  })
+}
+
 async function injectActiveTab() {
   await withBusy(injectButton, async () => {
     await sendMessage({ type: 'INJECT_ACTIVE_TAB' })
@@ -211,6 +229,7 @@ function renderShops() {
 
 function renderCaptures(latestCaptures) {
   const entries = [
+    ['sales', '销售数据'],
     ['product', '商品数据'],
     ['delivery', '发货数据'],
   ]
@@ -309,7 +328,12 @@ async function syncCapture(kind, button) {
   await withBusy(button, async () => {
     const response = await sendMessage({ type: 'SYNC_CAPTURE', kind })
     await loadState()
-    const total = kind === 'product' ? response.result.imported : response.result.extractedTotal
+    const total =
+      kind === 'product'
+        ? response.result.imported
+        : kind === 'sales'
+          ? response.result.batch?.importedTotal
+          : response.result.extractedTotal
     setStatus(`同步完成：${total ?? 0} 条。`, 'success')
   })
 }
@@ -327,7 +351,12 @@ async function fetchAllCapture(kind, button, shouldSync) {
 
     const syncResponse = await sendMessage({ type: 'SYNC_CAPTURE', kind })
     await loadState()
-    const syncedTotal = kind === 'product' ? syncResponse.result.imported : syncResponse.result.extractedTotal
+    const syncedTotal =
+      kind === 'product'
+        ? syncResponse.result.imported
+        : kind === 'sales'
+          ? syncResponse.result.batch?.importedTotal
+          : syncResponse.result.extractedTotal
     setStatus(`抓取并同步完成：${syncedTotal ?? total} 条。`, 'success')
   })
 }

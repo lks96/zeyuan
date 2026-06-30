@@ -6,6 +6,7 @@ const syncKey = 'lastSync'
 const productSnapshotKey = 'productLatestSnapshot'
 const deliverySnapshotKey = 'deliveryLatestSnapshot'
 const sellerBackendHosts = new Set(['agentseller.temu.com', 'seller.kuajingmaihuo.com'])
+const activeProductStatus = 100
 
 const packagedConfig = globalThis.TEMU_TOOLS_EXTENSION_CONFIG || {}
 
@@ -16,6 +17,7 @@ const defaultSettings = {
   shopName: '',
   autoProductSync: false,
   autoDeliverySync: false,
+  autoSalesSync: true,
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -29,6 +31,9 @@ async function handleMessage(message, sender) {
   switch (message?.type) {
     case 'CAPTURE_RESPONSE':
       await saveCapture(message.capture, sender)
+      if (message.capture?.kind === 'sales') {
+        scheduleSalesCaptureSync(message.capture, sender)
+      }
       return { ok: true }
     case 'PAGE_READY':
       scheduleAutoChecks(sender)
@@ -59,6 +64,9 @@ async function handleMessage(message, sender) {
     case 'CHECK_LATEST_DELIVERY':
       await assertActiveSellerBackend()
       return { ok: true, result: await checkLatestDelivery({ manual: true }) }
+    case 'SYNC_SALES_OVERALL':
+      await assertActiveSellerBackend()
+      return { ok: true, result: await syncSalesOverall({ manual: true }) }
     case 'SYNC_SELLER_SHOP':
       await assertActiveSellerBackend()
       return { ok: true, result: await syncSellerShop() }
@@ -97,6 +105,7 @@ async function saveSettings(partial) {
     shopName: String(partial.shopName ?? current.shopName ?? '').trim(),
     autoProductSync: Boolean(partial.autoProductSync ?? current.autoProductSync),
     autoDeliverySync: Boolean(partial.autoDeliverySync ?? current.autoDeliverySync),
+    autoSalesSync: Boolean(partial.autoSalesSync ?? current.autoSalesSync),
   }
   await chrome.storage.local.set({ [settingsKey]: next })
   return next
@@ -110,6 +119,35 @@ function scheduleAutoChecks(sender) {
     checkLatestProduct({ tabId, frameId: sender.frameId || 0, manual: false }).catch(() => {})
     checkLatestDelivery({ tabId, frameId: sender.frameId || 0, manual: false }).catch(() => {})
   }, 3000)
+}
+
+let salesSyncInFlight = false
+
+function scheduleSalesCaptureSync(capture, sender) {
+  if (salesSyncInFlight) return
+  salesSyncInFlight = true
+  setTimeout(async () => {
+    try {
+      const state = await getState()
+      if (!state.settings.autoSalesSync || !state.settings.token) return
+      if (!Number(state.settings.shopId || 0)) return
+      await fetchAllCapture('sales')
+      await syncCapture('sales')
+    } catch {
+      // Manual sync in the popup will surface errors; auto sync stays quiet.
+    } finally {
+      salesSyncInFlight = false
+    }
+  }, 600)
+}
+
+async function syncSalesOverall() {
+  const allCapture = await fetchAllCapture('sales')
+  const result = await syncCapture('sales')
+  return {
+    autoFetchTotal: allCapture.autoFetchTotal || allCapture.itemCount || 0,
+    syncResult: result,
+  }
 }
 
 async function login(credentials) {
@@ -168,7 +206,7 @@ async function syncSellerShop() {
 }
 
 async function syncCapture(kind) {
-  if (kind !== 'product' && kind !== 'delivery') {
+  if (kind !== 'product' && kind !== 'delivery' && kind !== 'sales') {
     throw new Error('不支持的数据类型')
   }
 
@@ -188,6 +226,8 @@ async function syncCapture(kind) {
     if (!shopId) throw new Error('请先选择要绑定的店铺')
     endpoint = '/tools/product-collection/import-json'
     body.shopId = shopId
+  } else if (kind === 'sales') {
+    endpoint = '/dashboard/sales-overall/import-json'
   }
 
   const result = await apiRequest(endpoint, {
@@ -213,6 +253,7 @@ async function clearCapture(kind) {
   } else {
     delete next.product
     delete next.delivery
+    delete next.sales
   }
   await chrome.storage.local.set({ [latestKey]: next })
   return next
@@ -220,7 +261,8 @@ async function clearCapture(kind) {
 
 async function saveCapture(capture, sender) {
   if (!capture?.kind || !capture.data) return
-  const kind = capture.kind === 'product' ? 'product' : capture.kind === 'delivery' ? 'delivery' : ''
+  const kind =
+    capture.kind === 'product' ? 'product' : capture.kind === 'delivery' ? 'delivery' : capture.kind === 'sales' ? 'sales' : ''
   if (!kind) return
 
   const state = await getState()
@@ -248,7 +290,7 @@ async function saveCapture(capture, sender) {
 }
 
 async function fetchAllCapture(kind) {
-  if (kind !== 'product' && kind !== 'delivery') {
+  if (kind !== 'product' && kind !== 'delivery' && kind !== 'sales') {
     throw new Error('不支持的数据类型')
   }
 
@@ -261,12 +303,14 @@ async function fetchAllCapture(kind) {
     throw new Error('缺少来源标签页，请在卖家中心页面重新触发一次接口')
   }
 
+  const salesSkcs = kind === 'sales' ? await fetchActiveProductSkcs(state) : []
   const response = await chrome.tabs.sendMessage(
     capture.tabId,
     {
       type: 'FETCH_ALL_CAPTURE',
       kind,
       capture,
+      salesSkcs,
     },
     { frameId: capture.frameId || 0 },
   )
@@ -281,6 +325,37 @@ async function fetchAllCapture(kind) {
   })
 
   return response.capture
+}
+
+async function fetchActiveProductSkcs(state) {
+  const shopId = Number(state.settings.shopId || 0)
+  if (!shopId) {
+    throw new Error('请先选择要同步销售数据的店铺')
+  }
+
+  const pageSize = 100
+  const skcs = []
+  const seen = new Set()
+  for (let page = 1; page <= 300; page += 1) {
+    const products = await apiRequest(
+      `/tools/product-collection/products?shopId=${encodeURIComponent(shopId)}&status=${activeProductStatus}&page=${page}&pageSize=${pageSize}`,
+    )
+    const rows = Array.isArray(products?.data) ? products.data : []
+    for (const product of rows) {
+      const skc = String(product?.productSkcId || '').trim()
+      if (!skc || seen.has(skc)) continue
+      seen.add(skc)
+      skcs.push(skc)
+    }
+
+    const total = Number(products?.rowsTotal || 0)
+    if (!rows.length || rows.length < pageSize || (total > 0 && skcs.length >= total)) break
+  }
+
+  if (skcs.length === 0) {
+    throw new Error('系统内没有找到当前店铺的在售 SKC，请先维护商品采集数据')
+  }
+  return skcs
 }
 
 async function checkLatestProduct(options = {}) {
@@ -545,7 +620,7 @@ function compactTimestamp(value) {
 }
 
 function countLikelyItems(data, kind) {
-  const matcher = kind === 'product' ? isProductItem : isDeliveryItem
+  const matcher = kind === 'product' ? isProductItem : kind === 'sales' ? isSalesItem : isDeliveryItem
   const matches = []
   collectMatches(data, matcher, matches, 0)
   return matches.length
@@ -580,6 +655,15 @@ function isDeliveryItem(value) {
     (Object.prototype.hasOwnProperty.call(value, 'subPurchaseOrderBasicVO') ||
       Object.prototype.hasOwnProperty.call(value, 'packageDetailList') ||
       Object.prototype.hasOwnProperty.call(value, 'deliveryOrderList'))
+  )
+}
+
+function isSalesItem(value) {
+  return (
+    Object.prototype.hasOwnProperty.call(value, 'productSkcId') &&
+    (Object.prototype.hasOwnProperty.call(value, 'skuQuantityDetailList') ||
+      Object.prototype.hasOwnProperty.call(value, 'skuQuantityTotalInfo') ||
+      Object.prototype.hasOwnProperty.call(value, 'productSkcPicture'))
   )
 }
 
@@ -629,9 +713,11 @@ function flattenDeliveryItems(items) {
 
 function getPagedItems(data) {
   const candidates = [
+    data?.result?.subOrderList,
     data?.result?.pageItems,
     data?.result?.list,
     data?.result?.data,
+    data?.subOrderList,
     data?.list,
     data?.data,
     Array.isArray(data) ? data : null,
