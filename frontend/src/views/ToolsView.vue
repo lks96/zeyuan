@@ -165,7 +165,7 @@ async function loadToolCenter() {
     ])
     toolPackages.value = packagePayload
     latestBatch.value = latestPayload
-    const latestDate = batchDateToInputValue(latestPayload?.date)
+    const latestDate = deliveryBatchInputDate(latestPayload)
     selectedDate.value = latestDate || todayInputValue()
     shops.value = shopPayload
     ensureActiveTool(packagePayload)
@@ -614,7 +614,7 @@ async function importJsonContent(content: string, sourceName: string) {
         sourceName,
         content: cleanContent,
     })
-    const importedDate = batchDateToInputValue(latestBatch.value.date)
+    const importedDate = deliveryBatchInputDate(latestBatch.value)
     if (importedDate) {
       selectedDate.value = importedDate
     }
@@ -802,6 +802,16 @@ function todayInputValue() {
 function batchDateToInputValue(batchDate?: string) {
   if (!batchDate || batchDate.length !== 6) return ''
   return `20${batchDate.slice(0, 2)}-${batchDate.slice(2, 4)}-${batchDate.slice(4, 6)}`
+}
+
+function deliveryBatchInputDate(batch?: DeliveryExtractBatch | null) {
+  const timestamp = batch?.data?.find((row) => row.expectPickUpGoodsTime > 0)?.expectPickUpGoodsTime
+  if (!timestamp) return batchDateToInputValue(batch?.date)
+  const date = new Date(timestamp)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 </script>
 

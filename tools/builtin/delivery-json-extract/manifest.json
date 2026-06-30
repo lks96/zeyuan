@@ -34,7 +34,8 @@
       "backend/migrations/004_delivery_extract_tool.sql",
       "backend/migrations/005_delivery_extract_supplier.sql",
       "backend/migrations/006_delivery_extract_shop_link.sql",
-      "backend/migrations/013_delivery_extract_express_batch.sql"
+      "backend/migrations/013_delivery_extract_express_batch.sql",
+      "backend/migrations/018_delivery_extract_supplier_time.sql"
     ]
   }
 }

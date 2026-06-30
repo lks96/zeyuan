@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"temu-tools/backend/internal/models"
 )
@@ -793,10 +794,8 @@ func (s *Store) DeleteToolModule(ctx context.Context, id string) error {
 func (s *Store) SaveDeliveryExtract(ctx context.Context, params SaveDeliveryExtractParams) (models.DeliveryExtractBatch, error) {
 	targetPayload := struct {
 		Data []models.DeliveryExtractRow `json:"data"`
-		Date string                      `json:"date"`
 	}{
 		Data: params.Rows,
-		Date: params.BatchDate,
 	}
 	targetJSON, err := json.Marshal(targetPayload)
 	if err != nil {
@@ -835,11 +834,11 @@ VALUES (?, ?, ?, ?, ?, ?)`
 INSERT INTO delivery_extract_rows (
   batch_id,
   supplier_id,
-  shop_id,
   product_name,
   product_skc_picture,
   delivery_order_sn,
   express_batch_sn,
+  expect_pick_up_goods_time,
   skc,
   skc_num,
   sku,
@@ -847,7 +846,7 @@ INSERT INTO delivery_extract_rows (
   receiver_name,
   row_json
 )
-VALUES (?, ?, (SELECT id FROM shops WHERE platform = 'temu' AND external_code = ? LIMIT 1), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for index := range params.Rows {
 		row := &params.Rows[index]
 		row.BatchID = batchID
@@ -860,11 +859,11 @@ VALUES (?, ?, (SELECT id FROM shops WHERE platform = 'temu' AND external_code = 
 			insertRow,
 			batchID,
 			row.SupplierID,
-			row.SupplierID,
 			row.ProductName,
 			row.ProductSkcPicture,
 			row.DeliveryOrderSn,
 			row.ExpressBatchSn,
+			row.ExpectPickUpGoodsTime,
 			row.SKC,
 			row.SkcNum,
 			row.SKU,
@@ -928,10 +927,23 @@ func (s *Store) GetLatestDeliveryExtractBatch(ctx context.Context, options Deliv
 	options = normalizeDeliveryExtractRowsOptions(options)
 
 	query := `SELECT id FROM delivery_extract_batches`
-	args := make([]any, 0, 1)
+	args := make([]any, 0, 3)
 	if options.BatchDate != "" {
-		query += ` WHERE batch_date = ?`
-		args = append(args, options.BatchDate)
+		if startMs, endMs, ok := deliveryBatchDateRangeMs(options.BatchDate); ok {
+			query += ` WHERE EXISTS (
+  SELECT 1
+  FROM delivery_extract_rows r
+  WHERE r.batch_id = delivery_extract_batches.id
+    AND (
+      (r.expect_pick_up_goods_time >= ? AND r.expect_pick_up_goods_time < ?)
+      OR (r.expect_pick_up_goods_time = 0 AND delivery_extract_batches.batch_date = ?)
+    )
+)`
+			args = append(args, startMs, endMs, options.BatchDate)
+		} else {
+			query += ` WHERE batch_date = ?`
+			args = append(args, options.BatchDate)
+		}
 	}
 	query += ` ORDER BY id DESC LIMIT 1`
 
@@ -968,25 +980,40 @@ LIMIT 1`
 		return models.DeliveryExtractBatch{}, err
 	}
 
-	countWhereClause := "WHERE batch_id = ?"
+	countWhereClause := "WHERE r.batch_id = ?"
 	rowWhereClause := "WHERE r.batch_id = ?"
 	args := []any{id}
 	if options.Query != "" {
-		countWhereClause += " AND (product_name LIKE ? OR delivery_order_sn LIKE ? OR express_batch_sn LIKE ? OR skc LIKE ? OR sku LIKE ?)"
+		countWhereClause += " AND (r.product_name LIKE ? OR r.delivery_order_sn LIKE ? OR r.express_batch_sn LIKE ? OR r.skc LIKE ? OR r.sku LIKE ?)"
 		rowWhereClause += " AND (r.product_name LIKE ? OR r.delivery_order_sn LIKE ? OR r.express_batch_sn LIKE ? OR r.skc LIKE ? OR r.sku LIKE ?)"
 		keyword := "%" + options.Query + "%"
 		args = append(args, keyword, keyword, keyword, keyword, keyword)
 	}
+	if options.BatchDate != "" {
+		if startMs, endMs, ok := deliveryBatchDateRangeMs(options.BatchDate); ok {
+			dateClause := ` AND (
+  (r.expect_pick_up_goods_time >= ? AND r.expect_pick_up_goods_time < ?)
+  OR (r.expect_pick_up_goods_time = 0 AND b.batch_date = ?)
+)`
+			countWhereClause += dateClause
+			rowWhereClause += dateClause
+			args = append(args, startMs, endMs, options.BatchDate)
+		} else {
+			countWhereClause += " AND b.batch_date = ?"
+			rowWhereClause += " AND b.batch_date = ?"
+			args = append(args, options.BatchDate)
+		}
+	}
 	if len(options.RowIDs) > 0 {
 		placeholders := strings.TrimRight(strings.Repeat("?,", len(options.RowIDs)), ",")
-		countWhereClause += " AND id IN (" + placeholders + ")"
+		countWhereClause += " AND r.id IN (" + placeholders + ")"
 		rowWhereClause += " AND r.id IN (" + placeholders + ")"
 		for _, rowID := range options.RowIDs {
 			args = append(args, rowID)
 		}
 	}
 
-	countQuery := "SELECT COUNT(*) FROM delivery_extract_rows " + countWhereClause
+	countQuery := "SELECT COUNT(*) FROM delivery_extract_rows r INNER JOIN delivery_extract_batches b ON b.id = r.batch_id " + countWhereClause
 	if err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&batch.RowsTotal); err != nil {
 		return models.DeliveryExtractBatch{}, err
 	}
@@ -999,13 +1026,13 @@ SELECT
   r.id,
   r.batch_id,
   r.supplier_id,
-  r.shop_id,
   COALESCE(s.shop_name, ''),
   COALESCE(s.eu_representative, ''),
   r.product_name,
   r.product_skc_picture,
   r.delivery_order_sn,
   r.express_batch_sn,
+  r.expect_pick_up_goods_time,
   r.skc,
   r.skc_num,
   r.sku,
@@ -1015,7 +1042,8 @@ SELECT
   COALESCE(pc.product_config, ''),
   r.created_at
 FROM delivery_extract_rows r
-LEFT JOIN shops s ON s.id = r.shop_id OR (r.shop_id IS NULL AND s.platform = 'temu' AND s.external_code = r.supplier_id)
+INNER JOIN delivery_extract_batches b ON b.id = r.batch_id
+LEFT JOIN shops s ON s.platform = 'temu' AND s.external_code = r.supplier_id
 LEFT JOIN product_collection_products pc ON pc.product_skc_id = r.skc AND pc.supplier_id = r.supplier_id
 ` + rowWhereClause + `
 ORDER BY r.id ASC`
@@ -1039,18 +1067,17 @@ LIMIT ? OFFSET ?`
 	batch.Rows = make([]models.DeliveryExtractRow, 0)
 	for rows.Next() {
 		var row models.DeliveryExtractRow
-		var shopID sql.NullInt64
 		if err := rows.Scan(
 			&row.ID,
 			&row.BatchID,
 			&row.SupplierID,
-			&shopID,
 			&row.ShopName,
 			&row.EuRepresentative,
 			&row.ProductName,
 			&row.ProductSkcPicture,
 			&row.DeliveryOrderSn,
 			&row.ExpressBatchSn,
+			&row.ExpectPickUpGoodsTime,
 			&row.SKC,
 			&row.SkcNum,
 			&row.SKU,
@@ -1061,9 +1088,6 @@ LIMIT ? OFFSET ?`
 			&row.CreatedAt,
 		); err != nil {
 			return models.DeliveryExtractBatch{}, err
-		}
-		if shopID.Valid {
-			row.ShopID = shopID.Int64
 		}
 		batch.Rows = append(batch.Rows, row)
 	}
@@ -1743,6 +1767,23 @@ func normalizeDeliveryExtractRowsOptions(options DeliveryExtractRowsOptions) Del
 		options.PageSize = maxPageSize
 	}
 	return options
+}
+
+func deliveryBatchDateRangeMs(value string) (int64, int64, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) != 6 {
+		return 0, 0, false
+	}
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.Local
+	}
+	start, err := time.ParseInLocation("060102", value, location)
+	if err != nil {
+		return 0, 0, false
+	}
+	end := start.AddDate(0, 0, 1)
+	return start.UnixMilli(), end.UnixMilli(), true
 }
 
 func normalizeProductCollectionProductsOptions(options ProductCollectionProductsOptions) ProductCollectionProductsOptions {

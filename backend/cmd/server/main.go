@@ -2043,30 +2043,32 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 
 		if len(item.PackageDetailList) == 0 {
 			rows = append(rows, models.DeliveryExtractRow{
-				SupplierID:        int64ToString(supplierID),
-				ProductName:       item.SubPurchaseOrderBasic.ProductName,
-				ProductSkcPicture: item.SubPurchaseOrderBasic.ProductSkcPicture,
-				DeliveryOrderSn:   item.DeliveryOrderSn,
-				ExpressBatchSn:    item.ExpressBatchSn,
-				SKC:               int64ToString(skc),
-				SkcNum:            skcNum,
-				ReceiverName:      item.ReceiveAddressInfo.ReceiverName,
+				SupplierID:            int64ToString(supplierID),
+				ProductName:           item.SubPurchaseOrderBasic.ProductName,
+				ProductSkcPicture:     item.SubPurchaseOrderBasic.ProductSkcPicture,
+				DeliveryOrderSn:       item.DeliveryOrderSn,
+				ExpressBatchSn:        item.ExpressBatchSn,
+				ExpectPickUpGoodsTime: item.ExpectPickUpGoodsTime,
+				SKC:                   int64ToString(skc),
+				SkcNum:                skcNum,
+				ReceiverName:          item.ReceiveAddressInfo.ReceiverName,
 			})
 			continue
 		}
 
 		for _, detail := range item.PackageDetailList {
 			rows = append(rows, models.DeliveryExtractRow{
-				SupplierID:        int64ToString(supplierID),
-				ProductName:       item.SubPurchaseOrderBasic.ProductName,
-				ProductSkcPicture: item.SubPurchaseOrderBasic.ProductSkcPicture,
-				DeliveryOrderSn:   item.DeliveryOrderSn,
-				ExpressBatchSn:    item.ExpressBatchSn,
-				SKC:               int64ToString(skc),
-				SkcNum:            skcNum,
-				SKU:               int64ToString(detail.ProductSkuID),
-				SkuNum:            firstPositiveInt(detail.SkuNum, skcNum),
-				ReceiverName:      item.ReceiveAddressInfo.ReceiverName,
+				SupplierID:            int64ToString(supplierID),
+				ProductName:           item.SubPurchaseOrderBasic.ProductName,
+				ProductSkcPicture:     item.SubPurchaseOrderBasic.ProductSkcPicture,
+				DeliveryOrderSn:       item.DeliveryOrderSn,
+				ExpressBatchSn:        item.ExpressBatchSn,
+				ExpectPickUpGoodsTime: item.ExpectPickUpGoodsTime,
+				SKC:                   int64ToString(skc),
+				SkcNum:                skcNum,
+				SKU:                   int64ToString(detail.ProductSkuID),
+				SkuNum:                firstPositiveInt(detail.SkuNum, skcNum),
+				ReceiverName:          item.ReceiveAddressInfo.ReceiverName,
 			})
 		}
 	}

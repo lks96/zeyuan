@@ -44,12 +44,12 @@ export interface DeliveryExtractRow {
   id: number
   batchId?: number
   supplierId: string
-  shopId?: number
   shopName?: string
   productName: string
   productSkcPicture: string
   deliveryOrderSn: string
   expressBatchSn: string
+  expectPickUpGoodsTime: number
   SKC: string
   skcNum: number
   SKU: string
@@ -61,7 +61,7 @@ export interface DeliveryExtractRow {
 export interface DeliveryExtractBatch {
   id: number
   sourceFile: string
-  date: string
+  date?: string
   sourceTotal: number
   extractedTotal: number
   rowsTotal?: number

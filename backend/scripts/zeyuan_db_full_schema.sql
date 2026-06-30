@@ -181,11 +181,11 @@ CREATE TABLE IF NOT EXISTS delivery_extract_rows (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '提取明细ID',
   batch_id BIGINT UNSIGNED NOT NULL COMMENT '提取批次ID',
   supplier_id VARCHAR(64) NOT NULL DEFAULT '' COMMENT '供应商或店铺编号',
-  shop_id BIGINT UNSIGNED NULL COMMENT '关联店铺ID',
   product_name TEXT NOT NULL COMMENT '商品名称',
   product_skc_picture VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '产品图片地址',
   delivery_order_sn VARCHAR(64) NOT NULL DEFAULT '' COMMENT '发货单号',
   express_batch_sn VARCHAR(64) NOT NULL DEFAULT '' COMMENT '发货批次号',
+  expect_pick_up_goods_time BIGINT NOT NULL DEFAULT 0 COMMENT '上门取货时间戳',
   skc VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'SKC码',
   skc_num INT NOT NULL DEFAULT 0 COMMENT 'SKC数量',
   sku VARCHAR(64) NOT NULL DEFAULT '' COMMENT 'SKU码',
@@ -196,14 +196,12 @@ CREATE TABLE IF NOT EXISTS delivery_extract_rows (
   PRIMARY KEY (id),
   KEY idx_delivery_extract_rows_batch_id (batch_id),
   KEY idx_delivery_extract_rows_supplier_id (supplier_id),
-  KEY idx_delivery_extract_rows_shop_id (shop_id),
   KEY idx_delivery_extract_rows_delivery_order_sn (delivery_order_sn),
   KEY idx_delivery_extract_rows_express_batch_sn (express_batch_sn),
+  KEY idx_delivery_extract_rows_expect_pick_up_goods_time (expect_pick_up_goods_time),
   KEY idx_delivery_extract_rows_skc (skc),
   CONSTRAINT fk_delivery_extract_rows_batch_id FOREIGN KEY (batch_id) REFERENCES delivery_extract_batches(id)
-    ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT fk_delivery_extract_rows_shop_id FOREIGN KEY (shop_id) REFERENCES shops(id)
-    ON DELETE SET NULL ON UPDATE CASCADE
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发货JSON提取明细表';
 
 CREATE TABLE IF NOT EXISTS product_collection_products (
@@ -485,7 +483,8 @@ VALUES
   ('014', '014_tool_packages.sql', '4e6c8b2dcb8c202beda1a36d21560eb4d0e0bf698fe02cdae073f3a678e312c0'),
   ('015', '015_product_collection_supplier_shop_link.sql', 'ba4dc6ab62f7bcc6a37985329c0c67d8afd34719b2fbea362be95ad23ec370c9'),
   ('016', '016_remove_shop_url.sql', 'daedad226e5ef7f510a1a037b00a4fab3680d2f949934760c47f297cf38b9984'),
-  ('017', '017_sales_overall_dashboard.sql', 'f5b601710fa2e26773ec099add3fc34caa23582d8143edd6911b855b50889938')
+  ('017', '017_sales_overall_dashboard.sql', 'f5b601710fa2e26773ec099add3fc34caa23582d8143edd6911b855b50889938'),
+  ('018', '018_delivery_extract_supplier_time.sql', 'bc6eb14c01378c23350da47b359fe561bd106d4edc3e36628b3bef80cb1e57ae')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   checksum = VALUES(checksum);

@@ -84,7 +84,7 @@ type ToolPackage struct {
 type DeliveryExtractBatch struct {
 	ID             int64                `json:"id"`
 	SourceFile     string               `json:"sourceFile"`
-	BatchDate      string               `json:"date"`
+	BatchDate      string               `json:"-"`
 	SourceTotal    int                  `json:"sourceTotal"`
 	ExtractedTotal int                  `json:"extractedTotal"`
 	RowsTotal      int                  `json:"rowsTotal,omitempty"`
@@ -96,24 +96,24 @@ type DeliveryExtractBatch struct {
 }
 
 type DeliveryExtractRow struct {
-	ID                int64     `json:"id"`
-	BatchID           int64     `json:"batchId,omitempty"`
-	SupplierID        string    `json:"supplierId"`
-	ShopID            int64     `json:"shopId,omitempty"`
-	ShopName          string    `json:"shopName,omitempty"`
-	EuRepresentative  string    `json:"euRepresentative,omitempty"`
-	ProductName       string    `json:"productName"`
-	ProductSkcPicture string    `json:"productSkcPicture"`
-	DeliveryOrderSn   string    `json:"deliveryOrderSn"`
-	ExpressBatchSn    string    `json:"expressBatchSn"`
-	SKC               string    `json:"SKC"`
-	SkcNum            int       `json:"skcNum"`
-	SKU               string    `json:"SKU"`
-	SkuNum            int       `json:"skuNum"`
-	ReceiverName      string    `json:"receiverName"`
-	ProductPieces     int       `json:"productPieces,omitempty"`
-	ProductConfig     string    `json:"productConfig,omitempty"`
-	CreatedAt         time.Time `json:"createdAt,omitempty"`
+	ID                    int64     `json:"id"`
+	BatchID               int64     `json:"batchId,omitempty"`
+	SupplierID            string    `json:"supplierId"`
+	ShopName              string    `json:"shopName,omitempty"`
+	EuRepresentative      string    `json:"euRepresentative,omitempty"`
+	ProductName           string    `json:"productName"`
+	ProductSkcPicture     string    `json:"productSkcPicture"`
+	DeliveryOrderSn       string    `json:"deliveryOrderSn"`
+	ExpressBatchSn        string    `json:"expressBatchSn"`
+	ExpectPickUpGoodsTime int64     `json:"expectPickUpGoodsTime"`
+	SKC                   string    `json:"SKC"`
+	SkcNum                int       `json:"skcNum"`
+	SKU                   string    `json:"SKU"`
+	SkuNum                int       `json:"skuNum"`
+	ReceiverName          string    `json:"receiverName"`
+	ProductPieces         int       `json:"productPieces,omitempty"`
+	ProductConfig         string    `json:"productConfig,omitempty"`
+	CreatedAt             time.Time `json:"createdAt,omitempty"`
 }
 
 type ProductCollectionProduct struct {
