@@ -2,6 +2,7 @@ import './config.js'
 
 const settingsKey = 'settings'
 const latestKey = 'latestCaptures'
+const diagnosticsKey = 'captureDiagnostics'
 const syncKey = 'lastSync'
 const productSnapshotKey = 'productLatestSnapshot'
 const deliverySnapshotKey = 'deliveryLatestSnapshot'
@@ -34,6 +35,9 @@ async function handleMessage(message, sender) {
       if (message.capture?.kind === 'sales') {
         scheduleSalesCaptureSync(message.capture, sender)
       }
+      return { ok: true }
+    case 'CAPTURE_DIAGNOSTIC':
+      await saveDiagnostic(message.diagnostic, sender)
       return { ok: true }
     case 'PAGE_READY':
       scheduleAutoChecks(sender)
@@ -76,13 +80,16 @@ async function handleMessage(message, sender) {
     case 'INJECT_ACTIVE_TAB':
       await assertActiveSellerBackend()
       return { ok: true, injected: await injectActiveTab() }
+    case 'CLEAR_DIAGNOSTICS':
+      await assertActiveSellerBackend()
+      return { ok: true, diagnostics: await clearDiagnostics() }
     default:
       return { ok: false, error: 'Unknown message type' }
   }
 }
 
 async function getState() {
-  const data = await chrome.storage.local.get([settingsKey, latestKey, syncKey])
+  const data = await chrome.storage.local.get([settingsKey, latestKey, diagnosticsKey, syncKey])
   const storedSettings = data[settingsKey] || {}
   return {
     settings: {
@@ -91,6 +98,7 @@ async function getState() {
       apiBase: defaultSettings.apiBase,
     },
     latestCaptures: data[latestKey] || {},
+    diagnostics: data[diagnosticsKey] || [],
     lastSync: data[syncKey] || null,
   }
 }
@@ -176,7 +184,7 @@ async function syncSellerShop() {
   }
 
   const target = await productTabTarget({}, state)
-  const response = await chrome.tabs.sendMessage(
+  const response = await sendTabCommand(
     target.tabId,
     { type: 'FETCH_SELLER_USER_INFO' },
     { frameId: target.frameId || 0 },
@@ -259,6 +267,48 @@ async function clearCapture(kind) {
   return next
 }
 
+async function saveDiagnostic(diagnostic, sender) {
+  if (!diagnostic?.requestUrl) return
+  if (!isSellerBackendUrl(diagnostic.requestUrl) && !isSellerBackendUrl(sender.tab?.url)) return
+
+  const data = await chrome.storage.local.get(diagnosticsKey)
+  const current = Array.isArray(data[diagnosticsKey]) ? data[diagnosticsKey] : []
+  const next = [
+    {
+      method: diagnostic.method || 'GET',
+      requestUrl: diagnostic.requestUrl || '',
+      requestBody: diagnostic.requestBody || '',
+      status: diagnostic.status || 0,
+      kind: diagnostic.kind || '',
+      itemCount: diagnostic.itemCount || 0,
+      listPath: diagnostic.listPath || '',
+      responseKeys: Array.isArray(diagnostic.responseKeys) ? diagnostic.responseKeys.slice(0, 12) : [],
+      pageUrl: diagnostic.pageUrl || sender.tab?.url || '',
+      pageTitle: diagnostic.pageTitle || sender.tab?.title || '',
+      capturedAt: diagnostic.capturedAt || new Date().toISOString(),
+    },
+    ...current,
+  ]
+  await chrome.storage.local.set({ [diagnosticsKey]: dedupeDiagnostics(next).slice(0, 40) })
+}
+
+async function clearDiagnostics() {
+  await chrome.storage.local.set({ [diagnosticsKey]: [] })
+  return []
+}
+
+function dedupeDiagnostics(items) {
+  const seen = new Set()
+  const result = []
+  for (const item of items) {
+    const key = [item.method, endpointPath(item.requestUrl), item.requestBody].join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+  }
+  return result
+}
+
 async function saveCapture(capture, sender) {
   if (!capture?.kind || !capture.data) return
   const kind =
@@ -304,7 +354,7 @@ async function fetchAllCapture(kind) {
   }
 
   const salesSkcs = kind === 'sales' ? await fetchActiveProductSkcs(state) : []
-  const response = await chrome.tabs.sendMessage(
+  const response = await sendTabCommand(
     capture.tabId,
     {
       type: 'FETCH_ALL_CAPTURE',
@@ -373,7 +423,7 @@ async function checkLatestProduct(options = {}) {
   }
 
   const target = await productTabTarget(options, state)
-  const response = await chrome.tabs.sendMessage(
+  const response = await sendTabCommand(
     target.tabId,
     { type: 'FETCH_LATEST_PRODUCT' },
     { frameId: target.frameId || 0 },
@@ -437,7 +487,7 @@ async function checkLatestDelivery(options = {}) {
   }
 
   const target = await deliveryTabTarget(options, state)
-  const response = await chrome.tabs.sendMessage(
+  const response = await sendTabCommand(
     target.tabId,
     { type: 'FETCH_LATEST_DELIVERY' },
     { frameId: target.frameId || 0 },
@@ -539,6 +589,48 @@ async function injectActiveTab() {
   return true
 }
 
+async function sendTabCommand(tabId, message, options = {}) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message, options)
+  } catch (error) {
+    if (!isMissingReceiverError(error)) throw error
+  }
+
+  await ensureContentScript(tabId)
+  await sleep(250)
+
+  try {
+    return await chrome.tabs.sendMessage(tabId, message, options)
+  } catch (error) {
+    if (isMissingReceiverError(error) && options?.frameId !== undefined) {
+      try {
+        return await chrome.tabs.sendMessage(tabId, message)
+      } catch (fallbackError) {
+        if (!isMissingReceiverError(fallbackError)) throw fallbackError
+      }
+    }
+    if (isMissingReceiverError(error)) {
+      throw new Error('页面接收端未就绪，请刷新 Temu 卖家后台页面后再试')
+    }
+    throw error
+  }
+}
+
+async function ensureContentScript(tabId) {
+  const tab = await chrome.tabs.get(tabId)
+  if (!isSellerBackendUrl(tab?.url)) {
+    throw new Error('请先打开 Temu 卖家后台页面')
+  }
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ['content-script.js'],
+  })
+}
+
+function isMissingReceiverError(error) {
+  return /receiving end does not exist|could not establish connection/i.test(error?.message || String(error || ''))
+}
+
 async function apiRequest(endpoint, options = {}) {
   const settings = (await getState()).settings
   const apiBase = normalizeApiBase(defaultSettings.apiBase)
@@ -611,6 +703,18 @@ function hostFromUrl(value) {
   } catch {
     return ''
   }
+}
+
+function endpointPath(value) {
+  try {
+    return new URL(value || '').pathname
+  } catch {
+    return String(value || '')
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function compactTimestamp(value) {

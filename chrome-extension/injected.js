@@ -91,6 +91,7 @@
     }
 
     const kind = detectPayloadKind(data, meta.url)
+    postDiagnostic(meta, data, kind)
     if (!kind) return
 
     window.postMessage(
@@ -105,6 +106,31 @@
           requestHeaders: meta.requestHeaders || {},
           requestBody: meta.requestBody || '',
           status: meta.status,
+          pageUrl: location.href,
+          pageTitle: document.title,
+          capturedAt: new Date().toISOString(),
+        },
+      },
+      '*',
+    )
+  }
+
+  function postDiagnostic(meta, data, kind) {
+    if (!isSellerApiUrl(meta.url)) return
+    const pageInfo = getPagedListInfo(data)
+    window.postMessage(
+      {
+        source: 'temu-tools-page-capture',
+        type: 'TEMU_TOOLS_CAPTURE_DIAGNOSTIC',
+        payload: {
+          kind,
+          method: meta.method,
+          requestUrl: meta.url,
+          requestBody: meta.requestBody || '',
+          status: meta.status,
+          itemCount: pageInfo.items.length,
+          listPath: pageInfo.path.join('.'),
+          responseKeys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data) : [],
           pageUrl: location.href,
           pageTitle: document.title,
           capturedAt: new Date().toISOString(),
@@ -474,6 +500,15 @@
       return new URL(requestUrl, location.href).hostname === 'seller.kuajingmaihuo.com'
     } catch {
       return location.hostname === 'seller.kuajingmaihuo.com'
+    }
+  }
+
+  function isSellerApiUrl(requestUrl) {
+    try {
+      const url = new URL(requestUrl, location.href)
+      return url.hostname === 'agentseller.temu.com' || url.hostname === 'seller.kuajingmaihuo.com'
+    } catch {
+      return location.hostname === 'agentseller.temu.com' || location.hostname === 'seller.kuajingmaihuo.com'
     }
   }
 

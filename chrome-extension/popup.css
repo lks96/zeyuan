@@ -388,6 +388,42 @@ select:focus {
   gap: 8px;
 }
 
+.diagnostic-panel {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.diagnostics {
+  display: grid;
+  gap: 7px;
+}
+
+.diagnostic-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 9px;
+  background: #f8fafc;
+}
+
+.diagnostic-card strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostic-card span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .capture-card {
   display: grid;
   gap: 8px;

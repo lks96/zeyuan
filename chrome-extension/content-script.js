@@ -23,6 +23,11 @@
         type: 'CAPTURE_RESPONSE',
         capture: message.payload,
       })
+    } else if (message.type === 'TEMU_TOOLS_CAPTURE_DIAGNOSTIC') {
+      chrome.runtime.sendMessage({
+        type: 'CAPTURE_DIAGNOSTIC',
+        diagnostic: message.payload,
+      })
     }
   })
 

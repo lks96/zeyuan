@@ -19,6 +19,8 @@ const checkLatestProductButton = document.querySelector('#checkLatestProductButt
 const checkLatestDeliveryButton = document.querySelector('#checkLatestDeliveryButton')
 const syncSalesOverallButton = document.querySelector('#syncSalesOverallButton')
 const capturesEl = document.querySelector('#captures')
+const diagnosticsEl = document.querySelector('#diagnostics')
+const clearDiagnosticsButton = document.querySelector('#clearDiagnosticsButton')
 const statusEl = document.querySelector('#status')
 
 let currentState = null
@@ -35,6 +37,7 @@ injectButton.addEventListener('click', injectActiveTab)
 checkLatestProductButton.addEventListener('click', checkLatestProduct)
 checkLatestDeliveryButton.addEventListener('click', checkLatestDelivery)
 syncSalesOverallButton.addEventListener('click', syncSalesOverall)
+clearDiagnosticsButton.addEventListener('click', clearDiagnostics)
 shopSelect.addEventListener('change', saveSelectedShop)
 autoProductSyncInput.addEventListener('change', saveSettings)
 autoDeliverySyncInput.addEventListener('change', saveSettings)
@@ -56,6 +59,7 @@ async function loadState() {
   apiBaseHint.textContent = apiHostText(response.settings.apiBase)
   renderAuthState()
   renderCaptures(response.latestCaptures || {})
+  renderDiagnostics(response.diagnostics || [])
 }
 
 async function login() {
@@ -300,6 +304,59 @@ function renderCaptures(latestCaptures) {
 
     card.appendChild(actions)
     capturesEl.appendChild(card)
+  }
+}
+
+function renderDiagnostics(diagnostics) {
+  diagnosticsEl.innerHTML = ''
+  if (!diagnostics.length) {
+    const empty = document.createElement('article')
+    empty.className = 'diagnostic-card'
+    const title = document.createElement('strong')
+    title.textContent = '暂无接口记录'
+    const meta = document.createElement('span')
+    meta.textContent = '刷新或操作卖家后台页面后，这里会显示最近 JSON 接口。'
+    empty.append(title, meta)
+    diagnosticsEl.appendChild(empty)
+    return
+  }
+
+  for (const item of diagnostics.slice(0, 12)) {
+    const card = document.createElement('article')
+    card.className = 'diagnostic-card'
+
+    const title = document.createElement('strong')
+    title.textContent = `${item.method || 'GET'} ${endpointLabel(item.requestUrl)}`
+    card.appendChild(title)
+
+    const meta = document.createElement('span')
+    const kind = item.kind ? ` · ${item.kind}` : ''
+    const count = item.itemCount ? ` · ${item.itemCount} 条` : ''
+    meta.textContent = `${formatTime(item.capturedAt)} · HTTP ${item.status || '-'}${kind}${count}`
+    card.appendChild(meta)
+
+    const body = document.createElement('span')
+    body.textContent = requestSummary(item.requestBody) || item.listPath || sourceText(item)
+    card.appendChild(body)
+
+    diagnosticsEl.appendChild(card)
+  }
+}
+
+async function clearDiagnostics() {
+  await withBusy(clearDiagnosticsButton, async () => {
+    const response = await sendMessage({ type: 'CLEAR_DIAGNOSTICS' })
+    renderDiagnostics(response.diagnostics || [])
+    setStatus('接口诊断记录已清空。', 'success')
+  })
+}
+
+function endpointLabel(rawUrl) {
+  try {
+    const url = new URL(rawUrl)
+    return url.pathname
+  } catch {
+    return rawUrl || 'unknown'
   }
 }
 
