@@ -1338,6 +1338,19 @@ func (s *Store) SaveSalesOverall(ctx context.Context, params SaveSalesOverallPar
 	}
 	defer tx.Rollback()
 
+	supplierIDs := make(map[string]struct{})
+	for _, row := range params.Rows {
+		supplierID := strings.TrimSpace(row.SupplierID)
+		if supplierID != "" {
+			supplierIDs[supplierID] = struct{}{}
+		}
+	}
+	for supplierID := range supplierIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM sales_overall_batches WHERE supplier_id = ?`, supplierID); err != nil {
+			return models.SalesOverallImportResult{}, err
+		}
+	}
+
 	const batchQuery = `
 INSERT INTO sales_overall_batches (source_name, supplier_id, supplier_name, source_total, imported_total, created_by)
 VALUES (?, ?, ?, ?, ?, ?)`
@@ -1562,17 +1575,31 @@ LEFT JOIN product_collection_products p ON p.product_skc_id = r.product_skc_id
 
 	inventoryQuery := `
 SELECT
-  COALESCE(SUM(r.lack_quantity), 0),
-  COALESCE(SUM(r.advice_quantity), 0),
-  COALESCE(SUM(r.warehouse_inventory_num), 0),
-  COALESCE(SUM(r.expected_occupied_inventory_num), 0),
-  COALESCE(SUM(r.unavailable_warehouse_inventory_num), 0),
-  COALESCE(SUM(r.wait_delivery_inventory_num), 0),
-  COALESCE(SUM(r.wait_receive_num), 0),
-  COALESCE(SUM(r.wait_approve_inventory_num), 0),
-  COALESCE(SUM(r.seller_warehouse_stock), 0)
+  COALESCE(SUM(product_inventory.lack_quantity), 0),
+  COALESCE(SUM(product_inventory.advice_quantity), 0),
+  COALESCE(SUM(product_inventory.warehouse_inventory_num), 0),
+  COALESCE(SUM(product_inventory.expected_occupied_inventory_num), 0),
+  COALESCE(SUM(product_inventory.unavailable_warehouse_inventory_num), 0),
+  COALESCE(SUM(product_inventory.wait_delivery_inventory_num), 0),
+  COALESCE(SUM(product_inventory.wait_receive_num), 0),
+  COALESCE(SUM(product_inventory.wait_approve_inventory_num), 0),
+  COALESCE(SUM(product_inventory.seller_warehouse_stock), 0)
+FROM (
+  SELECT
+    r.product_skc_id,
+    MAX(r.lack_quantity) AS lack_quantity,
+    MAX(r.advice_quantity) AS advice_quantity,
+    MAX(r.warehouse_inventory_num) AS warehouse_inventory_num,
+    MAX(r.expected_occupied_inventory_num) AS expected_occupied_inventory_num,
+    MAX(r.unavailable_warehouse_inventory_num) AS unavailable_warehouse_inventory_num,
+    MAX(r.wait_delivery_inventory_num) AS wait_delivery_inventory_num,
+    MAX(r.wait_receive_num) AS wait_receive_num,
+    MAX(r.wait_approve_inventory_num) AS wait_approve_inventory_num,
+    MAX(r.seller_warehouse_stock) AS seller_warehouse_stock
 FROM sales_overall_rows r
-` + whereClause
+` + whereClause + `
+  GROUP BY r.product_skc_id
+) product_inventory`
 	if err := s.db.QueryRowContext(ctx, inventoryQuery, args...).Scan(
 		&dashboard.Inventory.LackQuantity,
 		&dashboard.Inventory.AdviceQuantity,
@@ -1597,10 +1624,10 @@ SELECT
   COALESCE(SUM(r.last_thirty_days_sale_volume), 0),
   COALESCE(SUM(r.last_seven_days_sale_volume), 0),
   COALESCE(SUM(r.today_sale_volume), 0),
-  COALESCE(SUM(r.warehouse_inventory_num), 0),
-  COALESCE(SUM(r.wait_receive_num), 0),
-  COALESCE(SUM(r.unavailable_warehouse_inventory_num), 0),
-  COALESCE(SUM(r.lack_quantity), 0),
+  COALESCE(MAX(r.warehouse_inventory_num), 0),
+  COALESCE(MAX(r.wait_receive_num), 0),
+  COALESCE(MAX(r.unavailable_warehouse_inventory_num), 0),
+  COALESCE(MAX(r.lack_quantity), 0),
   COALESCE(SUM(r.last_thirty_days_sale_volume * r.supplier_price_cent), 0),
   COALESCE(SUM(r.last_thirty_days_sale_volume * (r.supplier_price_cent - ` + costExpr + `)), 0)
 FROM sales_overall_rows r
