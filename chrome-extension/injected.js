@@ -17,8 +17,9 @@
 
   const originalFetch = window.fetch
   window.fetch = async function patchedFetch(input, init) {
+    const requestBody = await getFetchBody(input, init)
     const response = await originalFetch.apply(this, arguments)
-    inspectFetchResponse(input, init, response, getFetchBody(input, init))
+    inspectFetchResponse(input, init, response, requestBody)
     return response
   }
 
@@ -286,7 +287,7 @@
       return fetchAllSalesPages(capture, salesSkcs)
     }
     const pageField = detectedKind === 'delivery' ? 'pageNo' : 'page'
-    const body = JSON.parse(capture.requestBody)
+    const body = parseRequestJSON(capture.requestBody, detectedKind === 'delivery' ? defaultDeliveryRequestBody() : defaultProductRequestBody())
     const pageSize = Number(body.pageSize || 20)
     if (!Number.isFinite(pageSize) || pageSize <= 0) {
       throw new Error('请求体里缺少有效 pageSize')
@@ -357,7 +358,7 @@
       throw new Error('系统内没有可用于查询销售数据的在售 SKC')
     }
 
-    const body = JSON.parse(capture.requestBody)
+    const body = parseRequestJSON(capture.requestBody, defaultSalesRequestBody())
     const pageSize = positiveNumber(body.pageSize, 10)
     const productSkcIdList = salesSkcs.map((skc) => Number(skc)).filter((skc) => Number.isFinite(skc) && skc > 0)
     if (!productSkcIdList.length) {
@@ -567,9 +568,15 @@
     return 'GET'
   }
 
-  function getFetchBody(input, init) {
+  async function getFetchBody(input, init) {
     if (init && 'body' in init) return stringifyBody(init.body)
-    if (input instanceof Request) return '[Request body]'
+    if (input instanceof Request) {
+      try {
+        return await input.clone().text()
+      } catch {
+        return '[Request body]'
+      }
+    }
     return ''
   }
 
@@ -655,6 +662,40 @@
   function positiveNumber(value, fallback) {
     const number = Number(value)
     return Number.isFinite(number) && number > 0 ? number : fallback
+  }
+
+  function parseRequestJSON(value, fallback) {
+    if (typeof value !== 'string' || value.trim()[0] !== '{') {
+      return { ...fallback }
+    }
+    try {
+      return JSON.parse(value)
+    } catch {
+      return { ...fallback }
+    }
+  }
+
+  function defaultProductRequestBody() {
+    return { page: 1, pageSize: 20 }
+  }
+
+  function defaultDeliveryRequestBody() {
+    return {
+      pageNo: 1,
+      pageSize: 100,
+      status: 1,
+      productLabelCodeStyle: 0,
+      onlyTaxWarehouseWaitApply: false,
+      onlyCanceledExpress: false,
+    }
+  }
+
+  function defaultSalesRequestBody() {
+    return {
+      pageNo: 1,
+      pageSize: 10,
+      isLack: 0,
+    }
   }
 
   function structuredCloneSafe(value) {
