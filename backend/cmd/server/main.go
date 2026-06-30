@@ -163,6 +163,7 @@ type deliveryExtractSourceItem struct {
 	DeliveryOrderSn       string                       `json:"deliveryOrderSn"`
 	ExpressBatchSn        string                       `json:"expressBatchSn"`
 	PlatExpressStatusTip  string                       `json:"platExpressStatusTip"`
+	ExpectPickUpGoodsTime int64                        `json:"expectPickUpGoodsTime"`
 	SupplierID            int64                        `json:"supplierId"`
 	ProductSkcID          int64                        `json:"productSkcId"`
 	DeliverSkcNum         int                          `json:"deliverSkcNum"`
@@ -2025,7 +2026,7 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 			continue
 		}
 		if batchDate == "" {
-			batchDate = deliveryDateFromOrderSn(item.DeliveryOrderSn)
+			batchDate = deliveryBatchDate(item)
 		}
 		supplierID := item.SupplierID
 		if supplierID == 0 {
@@ -2089,6 +2090,7 @@ func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSo
 			child.ExpressBatchSn = firstNonEmptyString(child.ExpressBatchSn, item.ExpressBatchSn)
 			child.DeliveryOrderSn = firstNonEmptyString(child.DeliveryOrderSn, item.DeliveryOrderSn)
 			child.PlatExpressStatusTip = firstNonEmptyString(child.PlatExpressStatusTip, item.PlatExpressStatusTip)
+			child.ExpectPickUpGoodsTime = firstPositiveInt64(child.ExpectPickUpGoodsTime, item.ExpectPickUpGoodsTime)
 			child.SupplierID = firstPositiveInt64(child.SupplierID, item.SupplierID)
 			if strings.TrimSpace(child.ReceiveAddressInfo.ReceiverName) == "" {
 				child.ReceiveAddressInfo = item.ReceiveAddressInfo
@@ -2225,6 +2227,32 @@ func deliveryDateFromOrderSn(orderSn string) string {
 		return orderSn[2:8]
 	}
 	return ""
+}
+
+func deliveryBatchDate(item deliveryExtractSourceItem) string {
+	if date := deliveryDateFromTimestamp(item.ExpectPickUpGoodsTime); date != "" {
+		return date
+	}
+	return deliveryDateFromOrderSn(item.DeliveryOrderSn)
+}
+
+func deliveryDateFromTimestamp(timestamp int64) string {
+	if timestamp <= 0 {
+		return ""
+	}
+
+	var parsed time.Time
+	if timestamp > 9999999999 {
+		parsed = time.UnixMilli(timestamp)
+	} else {
+		parsed = time.Unix(timestamp, 0)
+	}
+
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.Local
+	}
+	return parsed.In(location).Format("060102")
 }
 
 func firstPositiveInt(values ...int) int {
