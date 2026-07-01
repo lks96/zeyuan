@@ -163,6 +163,7 @@ type deliveryExtractSourceItem struct {
 	DeliveryOrderSn       string                       `json:"deliveryOrderSn"`
 	ExpressBatchSn        string                       `json:"expressBatchSn"`
 	PlatExpressStatusTip  string                       `json:"platExpressStatusTip"`
+	CanCancelExpress      *bool                        `json:"canCancelExpress"`
 	ExpectPickUpGoodsTime int64                        `json:"expectPickUpGoodsTime"`
 	SupplierID            int64                        `json:"supplierId"`
 	ProductSkcID          int64                        `json:"productSkcId"`
@@ -2022,7 +2023,7 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 	batchDate := ""
 
 	for _, item := range items {
-		if !isPendingCourierPickup(item) {
+		if !isImportableDeliveryItem(item) {
 			continue
 		}
 		if batchDate == "" {
@@ -2076,8 +2077,11 @@ func extractDeliveryRows(items []deliveryExtractSourceItem) ([]models.DeliveryEx
 	return rows, batchDate
 }
 
-func isPendingCourierPickup(item deliveryExtractSourceItem) bool {
-	return strings.TrimSpace(item.PlatExpressStatusTip) == "待快递揽收"
+func isImportableDeliveryItem(item deliveryExtractSourceItem) bool {
+	if strings.TrimSpace(item.PlatExpressStatusTip) != "待快递揽收" {
+		return false
+	}
+	return item.CanCancelExpress == nil || *item.CanCancelExpress
 }
 
 func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSourceItem {
@@ -2092,6 +2096,9 @@ func flattenDeliveryItems(items []deliveryExtractSourceItem) []deliveryExtractSo
 			child.ExpressBatchSn = firstNonEmptyString(child.ExpressBatchSn, item.ExpressBatchSn)
 			child.DeliveryOrderSn = firstNonEmptyString(child.DeliveryOrderSn, item.DeliveryOrderSn)
 			child.PlatExpressStatusTip = firstNonEmptyString(child.PlatExpressStatusTip, item.PlatExpressStatusTip)
+			if child.CanCancelExpress == nil {
+				child.CanCancelExpress = item.CanCancelExpress
+			}
 			child.ExpectPickUpGoodsTime = firstPositiveInt64(child.ExpectPickUpGoodsTime, item.ExpectPickUpGoodsTime)
 			child.SupplierID = firstPositiveInt64(child.SupplierID, item.SupplierID)
 			if strings.TrimSpace(child.ReceiveAddressInfo.ReceiverName) == "" {

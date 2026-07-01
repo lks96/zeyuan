@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS delivery_extract_rows (
   KEY idx_delivery_extract_rows_batch_id (batch_id),
   KEY idx_delivery_extract_rows_supplier_id (supplier_id),
   KEY idx_delivery_extract_rows_delivery_order_sn (delivery_order_sn),
+  KEY idx_delivery_extract_rows_order_skc (delivery_order_sn, skc),
   KEY idx_delivery_extract_rows_express_batch_sn (express_batch_sn),
   KEY idx_delivery_extract_rows_expect_pick_up_goods_time (expect_pick_up_goods_time),
   KEY idx_delivery_extract_rows_skc (skc),
@@ -484,7 +485,8 @@ VALUES
   ('015', '015_product_collection_supplier_shop_link.sql', 'ba4dc6ab62f7bcc6a37985329c0c67d8afd34719b2fbea362be95ad23ec370c9'),
   ('016', '016_remove_shop_url.sql', 'daedad226e5ef7f510a1a037b00a4fab3680d2f949934760c47f297cf38b9984'),
   ('017', '017_sales_overall_dashboard.sql', 'f5b601710fa2e26773ec099add3fc34caa23582d8143edd6911b855b50889938'),
-  ('018', '018_delivery_extract_supplier_time.sql', 'bc6eb14c01378c23350da47b359fe561bd106d4edc3e36628b3bef80cb1e57ae')
+  ('018', '018_delivery_extract_supplier_time.sql', 'bc6eb14c01378c23350da47b359fe561bd106d4edc3e36628b3bef80cb1e57ae'),
+  ('019', '019_delivery_extract_order_skc_index.sql', '8889c3ee099f4f14769f03ca90b067c1f69a32c20ac0d6fdb1bc6546234a92b7')
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),
   checksum = VALUES(checksum);

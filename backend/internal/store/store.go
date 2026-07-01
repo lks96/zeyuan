@@ -830,6 +830,28 @@ VALUES (?, ?, ?, ?, ?, ?)`
 		return models.DeliveryExtractBatch{}, err
 	}
 
+	const findExistingRow = `
+SELECT id
+FROM delivery_extract_rows
+WHERE delivery_order_sn = ? AND skc = ?
+ORDER BY id DESC
+LIMIT 1
+FOR UPDATE`
+	const updateRow = `
+UPDATE delivery_extract_rows
+SET
+  batch_id = ?,
+  supplier_id = ?,
+  product_name = ?,
+  product_skc_picture = ?,
+  express_batch_sn = ?,
+  expect_pick_up_goods_time = ?,
+  skc_num = ?,
+  sku = ?,
+  sku_num = ?,
+  receiver_name = ?,
+  row_json = ?
+WHERE id = ?`
 	const insertRow = `
 INSERT INTO delivery_extract_rows (
   batch_id,
@@ -850,10 +872,41 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for index := range params.Rows {
 		row := &params.Rows[index]
 		row.BatchID = batchID
+		var existingRowID int64
+		err := tx.QueryRowContext(ctx, findExistingRow, row.DeliveryOrderSn, row.SKC).Scan(&existingRowID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return models.DeliveryExtractBatch{}, err
+		}
+		if existingRowID > 0 {
+			row.ID = existingRowID
+		}
 		rowJSON, err := json.Marshal(row)
 		if err != nil {
 			return models.DeliveryExtractBatch{}, err
 		}
+
+		if existingRowID > 0 {
+			if _, err := tx.ExecContext(
+				ctx,
+				updateRow,
+				batchID,
+				row.SupplierID,
+				row.ProductName,
+				row.ProductSkcPicture,
+				row.ExpressBatchSn,
+				row.ExpectPickUpGoodsTime,
+				row.SkcNum,
+				row.SKU,
+				row.SkuNum,
+				row.ReceiverName,
+				string(rowJSON),
+				existingRowID,
+			); err != nil {
+				return models.DeliveryExtractBatch{}, err
+			}
+			continue
+		}
+
 		result, err := tx.ExecContext(
 			ctx,
 			insertRow,
